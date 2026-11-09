@@ -1007,7 +1007,16 @@
     return c;
   }
 
+  /* ---- OCR：常驻 worker + 预热 + 进度 + 超时 ---- */
   var tesseractPromise = null;
+  var ocrWorkerPromise = null;
+  var ocrStatusEl = null;
+
+  function setOcrStatus(txt) {
+    if (!ocrStatusEl) ocrStatusEl = document.getElementById("scanText");
+    if (ocrStatusEl) ocrStatusEl.textContent = txt;
+  }
+
   function loadTesseract() {
     if (window.Tesseract) return Promise.resolve();
     if (tesseractPromise) return tesseractPromise;
@@ -1016,25 +1025,52 @@
       s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
       s.async = true;
       s.onload = function () { resolve(); };
-      s.onerror = function () { tesseractPromise = null; reject(new Error("tesseract 加载失败")); };
+      s.onerror = function () { tesseractPromise = null; reject(new Error("脚本加载失败")); };
       document.head.appendChild(s);
     });
     return tesseractPromise;
   }
 
-  function ocrStrip(canvas) {
-    return loadTesseract().then(function () {
-      return Tesseract.createWorker("chi_sim", 1, { logger: function () {} });
+  function getOcrWorker() {
+    if (ocrWorkerPromise) return ocrWorkerPromise;
+    ocrWorkerPromise = loadTesseract().then(function () {
+      return Tesseract.createWorker("chi_sim", 1, {
+        logger: function (m) {
+          if (!m) return;
+          if (m.status === "loading language traineddata" || m.status === "initializing api") {
+            var p = Math.round((m.progress || 0) * 100);
+            setOcrStatus("识别引擎加载中 " + p + "%（首次需下载语言包）");
+          }
+        }
+      });
     }).then(function (worker) {
-      return worker.setParameters({ tessedit_pageseg_mode: "7" }).then(function () {
-        return worker.recognize(canvas);
-      }).then(function (res) {
+      return worker.setParameters({ tessedit_pageseg_mode: "7" }).then(function () { return worker; });
+    }).catch(function (e) {
+      ocrWorkerPromise = null;
+      throw e;
+    });
+    return ocrWorkerPromise;
+  }
+
+  function ocrStrip(canvas) {
+    var started = Date.now();
+    return getOcrWorker().then(function (worker) {
+      setOcrStatus("识别中…");
+      return worker.recognize(canvas).then(function (res) {
         var txt = (res && res.data && res.data.text) || "";
-        return worker.terminate().then(function () {
-          return txt.replace(/\s+/g, "").replace(/[|丨]/g, "").trim();
-        });
+        var cost = ((Date.now() - started) / 1000).toFixed(1);
+        return { text: txt.replace(/\s+/g, "").replace(/[|丨]/g, "").trim(), cost: cost };
       });
     });
+  }
+
+  /* 空闲预热：页面打开 2.5 秒后悄悄把引擎拉起来，第一次扫码就不用等模型 */
+  function warmupOcr() {
+    setTimeout(function () {
+      try {
+        getOcrWorker().then(function () { setOcrStatus("识别引擎已就绪"); }).catch(function () {});
+      } catch (e) {}
+    }, 2500);
   }
 
   document.getElementById("btnScan").addEventListener("click", function () {
@@ -1070,8 +1106,9 @@
       document.getElementById("scanText").textContent = "头像已抠出，正在识别名字…";
       toast("正在识别名字（首次需下载语言包，约 11MB）…", 4000);
 
-      ocrStrip(strip).then(function (txt) {
-        var clean = (txt || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
+      var timeout = new Promise(function (_, rej) { setTimeout(function () { rej(new Error("超时")); }, 30000); });
+      Promise.race([ocrStrip(strip), timeout]).then(function (r) {
+        var clean = (r.text || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
         if (clean.length >= 2) {
           if (state.tpl === "alipay") {
             state.merchant = clean.slice(0, 16);
@@ -1080,9 +1117,9 @@
             state.name = clean.slice(0, 24);
             document.getElementById("inName").value = state.name;
           }
-          document.getElementById("scanText").textContent = "已识别：" + clean;
+          document.getElementById("scanText").textContent = "已识别：" + clean + "（" + r.cost + "s）";
           render();
-          toast("识别完成：" + clean, 2600);
+          toast("识别完成：" + clean, 2200);
         } else {
           document.getElementById("scanText").textContent = "头像已抠出；名字没认出来";
           toast("名字没认出来，手动改一下", 2400);
@@ -1174,6 +1211,7 @@
   applyTplVisibility();
   syncClock();
   initBattery();
+  warmupOcr();
   render();
 })();
 </script>
