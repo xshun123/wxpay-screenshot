@@ -1113,6 +1113,8 @@
   }
 
   /* ---- 主力识别引擎：PaddleOCR（PP-OCRv2）—— 带下载进度 / 超时 / 手动加载 ---- */
+  var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   var paddleApi = null;
   var paddlePromise = null;
   var paddleState = "idle"; // idle | loading | ready | failed
@@ -1168,6 +1170,7 @@
   }
 
   function ensureEngine() {
+    if (isIOS) return Promise.reject(new Error("iPhone 上已关闭重引擎"));
     if (paddleState === "ready" && paddleApi) return Promise.resolve(paddleApi);
     if (paddlePromise) return paddlePromise;
     paddleState = "loading";
@@ -1272,7 +1275,7 @@
       var p = ocrWorkerPromise;
       ocrWorkerPromise = null;
       p.then(function (w) { try { w.terminate(); } catch (e) {} }).catch(function () {});
-    }, 90000);
+    }, isIOS ? 2500 : 90000);
   }
 
   function ocrStrip(canvas) {
@@ -1615,19 +1618,14 @@
   initBattery();
   render();
 
-  // 上次成功加载过就自动恢复（模型已缓存，不用再手点）
-  try {
-    if (localStorage.getItem("wxOcrReady") === "1") {
-      engineStatus("正在恢复识别引擎（已缓存，稍等）…");
-      setTimeout(function () {
-        ensureEngine().then(function () {
-          engineStatus("识别引擎已就绪（PaddleOCR），可以扫码了");
-        }).catch(function () {
-          engineStatus("识别引擎恢复失败，扫码时会用备用引擎");
-        });
-      }, 800);
-    }
-  } catch (e) {}
+  if (isIOS) {
+    var engBtn = document.getElementById("btnEngine");
+    if (engBtn) engBtn.style.display = "none";
+    engineStatus("iPhone 使用轻量识别引擎（省内存，避免 Safari 崩页）");
+  } else {
+    try { localStorage.removeItem("wxOcrReady"); } catch (e) {}
+  }
+
 })();
 </script>
 </body>
