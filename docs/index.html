@@ -1091,6 +1091,32 @@
   }
 
   function downloadWithProgress(url, onProgress) {
+    // 先看 Cache Storage，命中就直接用（第二次打开秒开）
+    if (window.caches) {
+      return caches.open("ocr-assets-v1").then(function (c) {
+        return c.match(url).then(function (hit) {
+          if (hit) {
+            if (onProgress) onProgress(1, 1);
+            return hit.text();
+          }
+          return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.responseType = "text";
+            xhr.onprogress = function (e) { if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total); };
+            xhr.onload = function () {
+              if (xhr.status < 200 || xhr.status >= 300) { reject(new Error("HTTP " + xhr.status)); return; }
+              var txt = xhr.responseText;
+              try { c.put(url, new Response(txt, { headers: { "Content-Type": "application/javascript" } })); } catch (e) {}
+              resolve(txt);
+            };
+            xhr.onerror = function () { reject(new Error("网络错误")); };
+            xhr.timeout = 120000;
+            xhr.send();
+          });
+        });
+      });
+    }
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open("GET", url, true);
@@ -1275,25 +1301,13 @@
         return (t || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
       }
 
-      // 两个引擎同时跑：PaddleOCR 准、Tesseract 快；谁给出像样结果用谁
-      var pP = (paddleState === "ready"
-          ? paddleOcr(strip)
-          : ensureEngine().then(function () { return paddleOcr(strip); }))
-        .then(function (t) { return t; }).catch(function () { return ""; });
-      var tP = ocrStrip(strip).then(function (r) { return r.text; }).catch(function () { return ""; });
+      // 先用 Tesseract 秒出结果（有进度），Paddle 不阻塞流程
+      var tessP = ocrStrip(strip).then(function (r) { return r.text; }).catch(function () { return ""; });
+      if (paddleState === "idle") { ensureEngine().catch(function () {}); }
 
-      Promise.race([
-        Promise.all([pP, tP]).then(function (arr) { return { paddle: arr[0], tess: arr[1] }; }),
-        timeout.then(function () { return null; })
-      ]).then(function (both) {
-        var text = "";
-        if (both) {
-          var pc = normText(both.paddle || "");
-          var pcLen = pc.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "").length;
-          text = (pcLen >= 2) ? both.paddle : (both.tess || "");
-          engineStatus(pcLen >= 2 ? "PaddleOCR 识别完成" : "备用引擎识别完成");
-        }
-        return { text: text };
+      Promise.race([tessP, timeout.then(function () { return ""; })]).then(function (text) {
+        engineStatus("备用引擎识别完成，正在整理…");
+        return { text: text || "" };
       }).then(function (r) {
         var c1 = normText(r.text);
         var inner1 = innerOf(c1);
@@ -1323,6 +1337,26 @@
           }
           document.getElementById("scanText").textContent = "已识别：" + clean;
           render();
+
+          // Paddle 就绪就用它复核一遍，更准就覆盖
+          if (paddleState === "ready") {
+            paddleOcr(strip).then(function (t) {
+              var c2 = fixMaskedName(normText(t));
+              var good = c2 && c2.length >= 2 && innerOf(c2) !== null;
+              if (good && c2 !== clean) {
+                if (state.tpl === "alipay") {
+                  state.merchant = c2.slice(0, 16);
+                  document.getElementById("inMerchant").value = state.merchant;
+                } else {
+                  state.name = c2.slice(0, 24);
+                  document.getElementById("inName").value = state.name;
+                }
+                document.getElementById("scanText").textContent = "已识别（PaddleOCR）：" + c2;
+                render();
+                toast("PaddleOCR 复核：" + c2, 2400);
+              }
+            }).catch(function () {});
+          }
           toast("识别完成：" + clean, 2200);
         } else {
           document.getElementById("scanText").textContent = "头像已抠出；名字没认出来，手动改一下";
