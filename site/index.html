@@ -1460,6 +1460,8 @@
   // 三个接口额度独立，一个用完自动换下一个
   var BAIDU_APIS = ["general_basic", "accurate_basic", "general"];
 
+  var baiduLastApi = "";
+
   function baiduCall(tok, api, b64) {
     var body = "image=" + encodeURIComponent(b64) +
       "&language_type=CHN_ENG&detect_direction=false&paragraph=false";
@@ -1479,6 +1481,7 @@
         if (words[i].indexOf("(") >= 0 || words[i].indexOf("（") >= 0) { pick = words[i]; break; }
       }
       if (!pick && words.length) pick = words.join("");
+      baiduLastApi = api;
       return String(pick).replace(/\s+/g, "");
     });
   }
@@ -1726,26 +1729,28 @@
         return (t || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
       }
 
-      // 先用百度 OCR（准、快），失败再退回 Tesseract
+      // 先百度，成功就直接用；失败才退回本地引擎（并显示失败原因）
       engineStatus("百度 OCR 识别中…");
-      var baiduP = baiduOcr(strip)
-        .then(function (t) { return { src: "baidu", text: t || "" }; })
-        .catch(function () { return null; });
-      var tessP = ocrStrip(strip).then(function (r) { return { src: "tess", text: r.text || "" }; }).catch(function () { return null; });
+      var tStart = Date.now();
 
-      Promise.race([
-        baiduP.then(function (res) {
-          if (res && res.text) return res;
-          return tessP;
-        }),
-        tessP.then(function (res) {
-          return baiduP.then(function (b) { return (b && b.text) ? b : res; });
-        }),
-        timeout.then(function () { return tessP; })
-      ]).then(function (pick) {
-        var t = pick && pick.text ? pick.text : "";
-        engineStatus(pick && pick.src === "baidu" ? "百度 OCR 识别完成" : "备用引擎识别完成，正在整理…");
-        return { text: t };
+      var engineP = baiduOcr(strip).then(function (t) {
+        var ms = Date.now() - tStart;
+        if (!t) throw new Error("返回空文本");
+        engineStatus("百度 OCR（" + (baiduLastApi || "general_basic") + " · " + ms + "ms）识别完成");
+        return { text: t, src: "baidu" };
+      }).catch(function (e) {
+        engineStatus("百度不可用（" + (e && e.message ? e.message : e) + "），改用本地引擎…");
+        return ocrStrip(strip).then(function (r) {
+          engineStatus("本地引擎（Tesseract）识别完成 · " + (Date.now() - tStart) + "ms");
+          return { text: r.text || "", src: "tess" };
+        });
+      });
+
+      Promise.race([engineP, timeout.then(function () {
+        engineStatus("识别超时，用已有结果继续");
+        return { text: "", src: "timeout" };
+      })]).then(function (pick) {
+        return { text: pick && pick.text ? pick.text : "" };
       }).then(function (r) {
         var c1 = normText(r.text);
         var inner1 = innerOf(c1);
