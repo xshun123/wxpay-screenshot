@@ -1074,7 +1074,38 @@
     return c;
   }
 
-  /* ---- OCR：常驻 worker + 预热 + 进度 + 超时 ---- */
+  /* ---- 主力识别引擎：PaddleOCR（PP-OCRv2，中文准确率比 Tesseract 高） ---- */
+  var paddlePromise = null;
+
+  function loadPaddle() {
+    if (window.paddlejs && window.paddlejs.ocr) return Promise.resolve(window.paddlejs.ocr);
+    if (paddlePromise) return paddlePromise;
+    paddlePromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/@paddlejs-models/ocr@1.2.4/lib/index.js";
+      s.async = true;
+      s.onload = function () {
+        var api = window.paddlejs && window.paddlejs.ocr;
+        if (api) resolve(api); else reject(new Error("paddle 未挂载"));
+      };
+      s.onerror = function () { paddlePromise = null; reject(new Error("paddle 加载失败")); };
+      document.head.appendChild(s);
+    }).then(function (api) {
+      return api.init().then(function () { return api; });
+    }).catch(function (e) { paddlePromise = null; throw e; });
+    return paddlePromise;
+  }
+
+  function paddleOcr(canvas) {
+    setOcrStatus("正在识别（PaddleOCR 引擎）…");
+    return loadPaddle().then(function (api) {
+      return api.recognize(canvas);
+    }).then(function (res) {
+      return (res && res.text) ? String(res.text) : "";
+    });
+  }
+
+  /* ---- OCR 备用引擎：Tesseract（paddle 不可用时回落） ---- */
   var tesseractPromise = null;
   var ocrWorkerPromise = null;
   var ocrStatusEl = null;
@@ -1187,7 +1218,15 @@
         return (t || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
       }
 
-      Promise.race([ocrStrip(strip), timeout]).then(function (r) {
+      var nameTry = paddleOcr(strip).then(function (t) { return { engine: "paddle", text: t }; }).catch(function () { return null; });
+
+      Promise.race([nameTry, timeout.then(function () { return null; })]).then(function (res) {
+        if (res && res.text && normText(res.text).replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "").length >= 2) {
+          return { text: res.text };
+        }
+        setOcrStatus("主引擎没认出来，换备用引擎…");
+        return ocrStrip(strip).then(function (r) { return { text: r.text }; });
+      }).then(function (r) {
         var c1 = normText(r.text);
         var inner1 = innerOf(c1);
         // * 容易被认成 坟/土/太 这类字；括号内太短或含可疑字，就放大二值化再认一遍
