@@ -622,9 +622,10 @@
   }
 
   /* ---------------- 渲染 ---------------- */
+  var lastW = 0, lastH = 0;
   function render() {
-    cv.width = W * SCALE;
-    cv.height = H * SCALE;
+    if (cv.width !== W * SCALE) { cv.width = W * SCALE; lastW = cv.width; }
+    if (cv.height !== H * SCALE) { cv.height = H * SCALE; lastH = cv.height; }
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     ctx.clearRect(0, 0, W, H);
     if (state.tpl === "alipay") drawAlipay();
@@ -1096,27 +1097,35 @@
     return ocrWorkerPromise;
   }
 
+  var ocrIdleTimer = null;
+
+  function scheduleOcrIdle() {
+    if (ocrIdleTimer) clearTimeout(ocrIdleTimer);
+    ocrIdleTimer = setTimeout(function () {
+      if (!ocrWorkerPromise) return;
+      var p = ocrWorkerPromise;
+      ocrWorkerPromise = null;
+      p.then(function (w) { try { w.terminate(); } catch (e) {} }).catch(function () {});
+    }, 90000);
+  }
+
   function ocrStrip(canvas) {
     var started = Date.now();
+    if (ocrIdleTimer) { clearTimeout(ocrIdleTimer); ocrIdleTimer = null; }
     return getOcrWorker().then(function (worker) {
       setOcrStatus("识别中…");
       return worker.recognize(canvas).then(function (res) {
         var txt = (res && res.data && res.data.text) || "";
         var ms = Date.now() - started;
         var cost = ms < 1000 ? (ms + "ms") : ((ms / 1000).toFixed(1) + "s");
+        scheduleOcrIdle();
         return { text: txt.replace(/\s+/g, "").replace(/[|丨]/g, "").trim(), cost: cost };
       });
     });
   }
 
-  /* 空闲预热：页面打开 2.5 秒后悄悄把引擎拉起来，第一次扫码就不用等模型 */
-  function warmupOcr() {
-    setTimeout(function () {
-      try {
-        getOcrWorker().then(function () { setOcrStatus("识别引擎已就绪"); }).catch(function () {});
-      } catch (e) {}
-    }, 2500);
-  }
+  /* 不再自动预热：OCR 的 WASM 常驻会吃掉上百 MB，手机上容易被系统当内存压力杀掉标签页。
+     改成点「选收款码」时才加载，识别完 90 秒无操作自动释放。 */
 
   document.getElementById("btnScan").addEventListener("click", function () {
     pickImage(function (img) {
@@ -1277,7 +1286,6 @@
   applyTplVisibility();
   syncClock();
   initBattery();
-  warmupOcr();
   render();
 })();
 </script>

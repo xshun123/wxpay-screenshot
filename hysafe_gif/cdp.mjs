@@ -1,8 +1,17 @@
 // Minimal CDP client over the DevTools WebSocket.
 import { setTimeout as sleep } from 'node:timers/promises';
 
-export async function listTargets(port = 9222) {
+export const PORT = Number(process.env.CDP_PORT || 9223);
+export async function listTargets(port = PORT) {
   const r = await fetch(`http://127.0.0.1:${port}/json/list`);
+  return await r.json();
+}
+export async function pickBlankPage() {
+  const ts = await listTargets();
+  const pages = ts.filter(t => t.type === 'page');
+  const blank = pages.find(t => t.url === 'about:blank');
+  if (blank) return blank;
+  const r = await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: 'PUT' });
   return await r.json();
 }
 

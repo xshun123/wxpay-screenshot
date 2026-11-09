@@ -1,0 +1,14 @@
+import { CDP, pickBlankPage, sleep } from './cdp.mjs';
+const page = await pickBlankPage();
+console.log('target', page.url, page.id);
+const c = await CDP.connect(page.webSocketDebuggerUrl);
+const orig = c.send.bind(c);
+c.send = async (m, p) => { try { const r = await orig(m, p); console.log('ok', m); return r; } catch (e) { console.log('FAIL', m, e.message); throw e; } };
+await c.send('Page.enable');
+await c.send('Page.bringToFront');
+await c.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+await c.send('Page.navigate', { url: 'https://hysafe.top/' });
+await sleep(5000);
+const png = await orig('Page.captureScreenshot', { format: 'png' });
+console.log('shot bytes', png.data.length);
+c.close();
