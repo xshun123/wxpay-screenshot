@@ -1409,7 +1409,44 @@
     return c;
   }
 
-  /* ---- 主力识别引擎：PaddleOCR（PP-OCRv2）—— 带下载进度 / 超时 / 手动加载 ---- */
+  /* ---- 主力识别：百度 OCR（准确率高，浏览器可直连） ---- */
+  var baiduTokenCache = null;
+
+  function getBaiduToken() {
+    if (baiduTokenCache) return Promise.resolve(baiduTokenCache);
+    return fetch("ocr-token.json?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("token 404"); return r.json(); })
+      .then(function (j) {
+        if (!j || !j.token) throw new Error("token 无效");
+        if (j.exp && j.exp < Date.now() + 3 * 24 * 3600 * 1000) throw new Error("token 快过期");
+        baiduTokenCache = j.token;
+        return j.token;
+      });
+  }
+
+  function baiduOcr(canvas) {
+    return getBaiduToken().then(function (tok) {
+      var b64 = canvas.toDataURL("image/png").split(",")[1];
+      var body = "image=" + encodeURIComponent(b64) +
+        "&language_type=CHN_ENG&detect_direction=false&paragraph=false";
+      return fetch("https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=" + encodeURIComponent(tok), {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || j.error_code) throw new Error((j && j.error_msg) || "baidu error");
+        var words = (j.words_result || []).map(function (w) { return w.words || ""; });
+        var pick = "";
+        for (var i = 0; i < words.length; i++) {
+          if (words[i].indexOf("(") >= 0 || words[i].indexOf("（") >= 0) { pick = words[i]; break; }
+        }
+        if (!pick && words.length) pick = words.join("");
+        return String(pick).replace(/\s+/g, "");
+      });
+    });
+  }
+
+  /* ---- 备用引擎：PaddleOCR（PP-OCRv2）—— 带下载进度 / 超时 / 手动加载 ---- */
   var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
               (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   var paddleApi = null;
@@ -1635,13 +1672,26 @@
         return (t || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
       }
 
-      // 先用 Tesseract 秒出结果（有进度），Paddle 不阻塞流程
-      var tessP = ocrStrip(strip).then(function (r) { return r.text; }).catch(function () { return ""; });
-      if (paddleState === "idle") { ensureEngine().catch(function () {}); }
+      // 先用百度 OCR（准、快），失败再退回 Tesseract
+      engineStatus("百度 OCR 识别中…");
+      var baiduP = baiduOcr(strip)
+        .then(function (t) { return { src: "baidu", text: t || "" }; })
+        .catch(function () { return null; });
+      var tessP = ocrStrip(strip).then(function (r) { return { src: "tess", text: r.text || "" }; }).catch(function () { return null; });
 
-      Promise.race([tessP, timeout.then(function () { return ""; })]).then(function (text) {
-        engineStatus("备用引擎识别完成，正在整理…");
-        return { text: text || "" };
+      Promise.race([
+        baiduP.then(function (res) {
+          if (res && res.text) return res;
+          return tessP;
+        }),
+        tessP.then(function (res) {
+          return baiduP.then(function (b) { return (b && b.text) ? b : res; });
+        }),
+        timeout.then(function () { return tessP; })
+      ]).then(function (pick) {
+        var t = pick && pick.text ? pick.text : "";
+        engineStatus(pick && pick.src === "baidu" ? "百度 OCR 识别完成" : "备用引擎识别完成，正在整理…");
+        return { text: t };
       }).then(function (r) {
         var c1 = normText(r.text);
         var inner1 = innerOf(c1);

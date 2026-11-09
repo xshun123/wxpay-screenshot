@@ -1,0 +1,38 @@
+name: refresh-baidu-token
+
+on:
+  schedule:
+    - cron: '0 3 */20 * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 刷新百度 OCR token
+        env:
+          BAIDU_AK: ${{ secrets.BAIDU_AK }}
+          BAIDU_SK: ${{ secrets.BAIDU_SK }}
+        run: |
+          python - <<'PY'
+          import json, os, time, urllib.parse, urllib.request
+          ak, sk = os.environ["BAIDU_AK"], os.environ["BAIDU_SK"]
+          url = "https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=%s&client_secret=%s" % (urllib.parse.quote(ak), urllib.parse.quote(sk))
+          with urllib.request.urlopen(url, timeout=30) as r:
+              j = json.loads(r.read().decode())
+          if "access_token" not in j:
+              raise SystemExit("no token: " + str(j)[:200])
+          out = {"token": j["access_token"], "exp": int(time.time()*1000) + int(j.get("expires_in", 2592000))*1000,
+                 "note": "baidu ocr token, refreshed by GitHub Action"}
+          for p in ("docs/ocr-token.json", "site/ocr-token.json"):
+              open(p, "w", encoding="utf-8").write(json.dumps(out, ensure_ascii=False, indent=1))
+          print("token refreshed")
+          PY
+      - name: 提交
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/ocr-token.json site/ocr-token.json
+          git diff --cached --quiet || git commit -m "chore: refresh baidu ocr token"
+          git push
