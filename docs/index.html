@@ -804,6 +804,67 @@
     toast("导出尺寸已切换");
   });
 
+  function ocrStripSingle(canvas) {
+    return getOcrWorker().then(function (w) {
+      return w.setParameters({ tessedit_pageseg_mode: "10" }).then(function () {
+        return w.recognize(canvas);
+      }).then(function (res) {
+        return w.setParameters({ tessedit_pageseg_mode: "7" }).then(function () {
+          return (res && res.data && res.data.text) || "";
+        });
+      });
+    });
+  }
+
+  /* 打码名里的最后一个真名常常被 Tesseract 吞掉，按字块切分单独认一次 */
+  function refineWithGlyphs(clean, info) {
+    if (!info || !info.glyphs || info.glyphs.length < 4) return Promise.resolve(clean);
+    var inner = innerOf(clean);
+    if (inner === null) return Promise.resolve(clean);
+
+    var starish = /[坟坎土丈太犬大叉乂乄㐅xX×✕·*]/;
+    var last = inner.charAt(inner.length - 1);
+    if (inner.length >= 3 && !starish.test(last)) return Promise.resolve(clean);
+
+    var gs = info.glyphs;
+    var maxH = 0;
+    for (var i = 0; i < gs.length; i++) if (gs[i][3] > maxH) maxH = gs[i][3];
+
+    var big = [];
+    for (var j = 0; j < gs.length; j++) if (gs[j][3] > maxH * 0.62) big.push(j);
+    if (big.length < 2) return Promise.resolve(clean);
+
+    var charIdx = big[big.length - 2];
+    var starN = 0;
+    for (var k = charIdx - 1; k >= 0; k--) {
+      if (gs[k][3] <= maxH * 0.62) starN++;
+      else break;
+    }
+    if (starN <= 0) starN = Math.max(1, inner.length - 1);
+
+    var g = gs[charIdx];
+    var pad = 3;
+    var cx = Math.max(0, g[0] - pad), cy = Math.max(0, g[1] - pad);
+    var cw = Math.min(info.iw - cx, g[2] + pad * 2);
+    var chh = Math.min(info.ih - cy, g[3] + pad * 2);
+    var k2 = 8;
+    var cc = document.createElement("canvas");
+    cc.width = cw * k2;
+    cc.height = chh * k2;
+    var g2 = cc.getContext("2d");
+    g2.imageSmoothingEnabled = true;
+    g2.drawImage(info.canvas, cx, cy, cw, chh, 0, 0, cc.width, cc.height);
+
+    return ocrStripSingle(cc).then(function (txt) {
+      var mch = String(txt || "").replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "");
+      if (!mch) return clean;
+      var ch2 = mch.charAt(0);
+      var idxP = clean.indexOf("(");
+      var prefix = idxP >= 0 ? clean.slice(0, idxP) : "";
+      return prefix + "(" + new Array(starN + 1).join("*") + ch2 + ")";
+    }).catch(function () { return clean; });
+  }
+
   /* 微信收款码的名字是「***杰」这种打码写法，OCR 常把 * 认成汉字，这里按"括号内最后一个字是真名"重建 */
   function fixMaskedName(txt) {
     var s = String(txt || "").replace(/\s+/g, "");
@@ -966,38 +1027,110 @@
       return l < 150 && sat < 70;
     }
 
-    var xa = Math.floor(iw * 0.08), xb = Math.floor(iw * 0.92);
-    var ya = Math.floor(ih * 0.08), yb = Math.floor(ih * 0.78);
+    // === 找二维码：黑色块密度 + 连通域合并（微信白底 / 支付宝蓝底都适用） ===
+    var CELL = 6;
+    var gw = Math.floor(iw / CELL), gh = Math.floor(ih / CELL);
+    var dens = new Float32Array(gw * gh);
+    for (var gy = 0; gy < gh; gy++) {
+      for (var gx = 0; gx < gw; gx++) {
+        var nDark = 0;
+        for (var yy5 = gy * CELL; yy5 < gy * CELL + CELL; yy5++) {
+          for (var xx5 = gx * CELL; xx5 < gx * CELL + CELL; xx5++) {
+            var i5 = (yy5 * iw + xx5) * 4;
+            if (d[i5] < 95 && d[i5 + 1] < 95 && d[i5 + 2] < 95) nDark++;
+          }
+        }
+        dens[gy * gw + gx] = nDark / (CELL * CELL);
+      }
+    }
 
-    var rowCnt = new Int32Array(ih);
-    for (var y = ya; y <= yb; y++) {
-      var cnt = 0;
-      for (var x = xa; x <= xb; x += 2) if (lumAt(x, y) < 100) cnt++;
-      rowCnt[y] = cnt * 2;
+    var vis = new Uint8Array(gw * gh);
+    var comps = [];
+    for (var sy = 0; sy < gh; sy++) {
+      for (var sx = 0; sx < gw; sx++) {
+        var idx0 = sy * gw + sx;
+        if (vis[idx0] || dens[idx0] < 0.28) continue;
+        var stack = [idx0];
+        vis[idx0] = 1;
+        var minx = sx, maxx = sx, miny = sy, maxy = sy;
+        while (stack.length) {
+          var cur = stack.pop();
+          var cuy = Math.floor(cur / gw), cux = cur - cuy * gw;
+          if (cux < minx) minx = cux;
+          if (cux > maxx) maxx = cux;
+          if (cuy < miny) miny = cuy;
+          if (cuy > maxy) maxy = cuy;
+          var nbs = [[cux - 1, cuy], [cux + 1, cuy], [cux, cuy - 1], [cux, cuy + 1]];
+          for (var k5 = 0; k5 < 4; k5++) {
+            var nx5 = nbs[k5][0], ny5 = nbs[k5][1];
+            if (nx5 < 0 || nx5 >= gw || ny5 < 0 || ny5 >= gh) continue;
+            var ni5 = ny5 * gw + nx5;
+            if (!vis[ni5] && dens[ni5] >= 0.28) { vis[ni5] = 1; stack.push(ni5); }
+          }
+        }
+        var bw5 = (maxx - minx + 1) * CELL, bh5 = (maxy - miny + 1) * CELL;
+        if (bw5 * bh5 > iw * ih * 0.002) comps.push([minx * CELL, miny * CELL, maxx * CELL + CELL, maxy * CELL + CELL]);
+      }
     }
-    var rowThr = iw * 0.15;
-    var qy0 = -1, qy1 = -1;
-    for (var y2 = ya; y2 <= yb; y2++) {
-      if (rowCnt[y2] > rowThr) { if (qy0 < 0) qy0 = y2; qy1 = y2; }
-    }
-    if (qy0 < 0) return null;
+    if (!comps.length) return null;
 
-    var colCnt = new Int32Array(iw);
-    for (var x2 = xa; x2 <= xb; x2++) {
-      var cc = 0;
-      for (var y3 = qy0; y3 <= qy1; y3 += 2) if (lumAt(x2, y3) < 100) cc++;
-      colCnt[x2] = cc * 2;
+    function bdist(a, b2) {
+      var dx = Math.max(0, Math.max(a[0], b2[0]) - Math.min(a[2], b2[2]));
+      var dy = Math.max(0, Math.max(a[1], b2[1]) - Math.min(a[3], b2[3]));
+      return Math.max(dx, dy);
     }
-    var colThr = (qy1 - qy0 + 1) * 0.15;
-    var qx0 = -1, qx1 = -1;
-    for (var x3 = xa; x3 <= xb; x3++) {
-      if (colCnt[x3] > colThr) { if (qx0 < 0) qx0 = x3; qx1 = x3; }
+
+    // 中间的头像会把二维码连通域打断，先按距离合并
+    var mergedAny = true;
+    while (mergedAny) {
+      mergedAny = false;
+      for (var ci = 0; ci < comps.length && !mergedAny; ci++) {
+        for (var cj = ci + 1; cj < comps.length; cj++) {
+          if (bdist(comps[ci], comps[cj]) <= 10) {
+            comps[ci] = [
+              Math.min(comps[ci][0], comps[cj][0]),
+              Math.min(comps[ci][1], comps[cj][1]),
+              Math.max(comps[ci][2], comps[cj][2]),
+              Math.max(comps[ci][3], comps[cj][3])
+            ];
+            comps.splice(cj, 1);
+            mergedAny = true;
+            break;
+          }
+        }
+      }
     }
-    if (qx0 < 0) return null;
+
+    var bestC = null, bestArea = 0;
+    for (var c5 = 0; c5 < comps.length; c5++) {
+      var cw = comps[c5][2] - comps[c5][0], ch = comps[c5][3] - comps[c5][1];
+      if (cw < Math.min(iw, ih) * 0.15 || ch < Math.min(iw, ih) * 0.15) continue;
+      if (cw / ch < 0.75 || cw / ch > 1.35) continue;
+      if (cw * ch > bestArea) { bestArea = cw * ch; bestC = comps[c5]; }
+    }
+    if (!bestC) return null;
+
+    var qx0 = bestC[0], qy0 = bestC[1], qx1 = bestC[2] - 1, qy1 = bestC[3] - 1;
+
+    // 收紧到真正的黑色像素范围
+    var tx0 = qx1, ty0 = qy1, tx1 = qx0, ty1 = qy0;
+    for (var yy6 = qy0; yy6 <= qy1; yy6 += 2) {
+      for (var xx6 = qx0; xx6 <= qx1; xx6 += 2) {
+        var i6 = (yy6 * iw + xx6) * 4;
+        if (d[i6] < 95 && d[i6 + 1] < 95 && d[i6 + 2] < 95) {
+          if (xx6 < tx0) tx0 = xx6;
+          if (xx6 > tx1) tx1 = xx6;
+          if (yy6 < ty0) ty0 = yy6;
+          if (yy6 > ty1) ty1 = yy6;
+        }
+      }
+    }
+    if (tx1 > tx0) { qx0 = tx0; qx1 = tx1; qy0 = ty0; qy1 = ty1; }
 
     var qw = qx1 - qx0 + 1, qh = qy1 - qy0 + 1;
     if (qh > qw * 1.15) { qy1 = qy0 + qw - 1; qh = qw; }
     if (qw > qh * 1.15) { qx1 = qx0 + qh - 1; qw = qh; }
+    if (qw < 40 || qh < 40) return null;
 
     var ccx = Math.round((qx0 + qx1) / 2), ccy = Math.round((qy0 + qy1) / 2);
 
@@ -1046,7 +1179,41 @@
       nameBox = [minX, minY, maxX - minX + 1, maxY - minY + 1];
     }
 
-    return { canvas: c, iw: iw, ih: ih, qr: [qx0, qy0, qw, qh], avatar: abox, name: nameBox, scale: s };
+    // 名字行的字块切分：用来数 * 的个数、并单独认最后一个真名
+    var glyphs = [];
+    if (nameBox) {
+      var gx0 = nameBox[0], gy0 = nameBox[1], gwid = nameBox[2], ghgt = nameBox[3];
+      var colHas = new Uint8Array(gwid);
+      var colTop = new Int16Array(gwid), colBot = new Int16Array(gwid);
+      for (var gxx = 0; gxx < gwid; gxx++) {
+        colTop[gxx] = 9999; colBot[gxx] = -1;
+        for (var gyy = 0; gyy < ghgt; gyy++) {
+          if (darkText(gx0 + gxx, gy0 + gyy)) {
+            colHas[gxx] = 1;
+            if (gyy < colTop[gxx]) colTop[gxx] = gyy;
+            if (gyy > colBot[gxx]) colBot[gxx] = gyy;
+          }
+        }
+      }
+      var segStart = -1;
+      for (var gxx2 = 0; gxx2 <= gwid; gxx2++) {
+        var has = gxx2 < gwid && colHas[gxx2];
+        if (has && segStart < 0) segStart = gxx2;
+        if (!has && segStart >= 0) {
+          var sxe = gxx2 - 1;
+          var top = 9999, bot = -1;
+          for (var q = segStart; q <= sxe; q++) {
+            if (colHas[q]) { if (colTop[q] < top) top = colTop[q]; if (colBot[q] > bot) bot = colBot[q]; }
+          }
+          if (sxe - segStart >= 1 && bot > top) {
+            glyphs.push([gx0 + segStart, gy0 + top, sxe - segStart + 1, bot - top + 1]);
+          }
+          segStart = -1;
+        }
+      }
+    }
+
+    return { canvas: c, iw: iw, ih: ih, qr: [qx0, qy0, qw, qh], avatar: abox, name: nameBox, glyphs: glyphs, scale: s };
   }
 
   function cropAvatar(info) {
@@ -1363,6 +1530,8 @@
           if (ia.length > ib.length) return a;
           return b;
         }).catch(function () { return fixMaskedName(c1); });
+      }).then(function (clean) {
+        return refineWithGlyphs(clean, info);
       }).then(function (clean) {
         if (clean && clean.length >= 2) {
           if (state.tpl === "alipay") {
