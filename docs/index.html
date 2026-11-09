@@ -87,16 +87,20 @@
   .scanStrip.on{display:block}
   .scanStrip img{display:block;width:100%;height:auto;border-radius:4px}
   .hidden{display:none!important}
-  #viewer{position:fixed;inset:0;background:rgba(8,9,12,.97);display:none;z-index:30;flex-direction:column}
+  #viewer{position:fixed;left:0;right:0;top:0;height:100vh;height:100dvh;background:rgba(8,9,12,.98);
+    display:none;z-index:60;flex-direction:column;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+    overscroll-behavior:contain}
   #viewer.on{display:flex}
-  #viewer .vTop{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;color:#cfd4dc;font-size:13px}
+  #viewer .vTop{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:#cfd4dc;font-size:13px;
+    flex:0 0 auto;position:relative;z-index:2;background:rgba(8,9,12,.9)}
   #viewer .vTop b{font-weight:600;color:#fff;font-size:14px}
   #vClose{padding:7px 14px;border-radius:10px;border:1px solid #2c333d;background:#1a1f26;color:#dfe4ea;font-size:13px;font-family:inherit}
   #viewer .vBody{flex:1;overflow:hidden;position:relative;touch-action:none}
   #viewer img{position:absolute;left:50%;top:50%;transform-origin:center center;
     max-width:none;user-select:none;-webkit-user-drag:none;border-radius:10px;box-shadow:0 12px 44px rgba(0,0,0,.65)}
-  #viewer .vHint{text-align:center;color:#79808c;font-size:11.5px;padding:4px 0 10px}
-  #viewer .vBar{display:flex;gap:10px;padding:0 16px 24px}
+  #viewer .vHint{text-align:center;color:#79808c;font-size:11.5px;padding:2px 0 8px;flex:0 0 auto}
+  #viewer .vBar{display:flex;gap:10px;padding:0 16px calc(20px + env(safe-area-inset-bottom));flex:0 0 auto;
+    position:relative;z-index:2;background:rgba(8,9,12,.9)}
   #viewer .vBar button{flex:1;padding:14px 0;border-radius:12px;border:0;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
   #vSave{background:var(--accent);color:#04210f}
   #vDownload{background:#1b2129;color:#dfe4ea;border:1px solid #2a3140}
@@ -1168,11 +1172,13 @@
     }).then(function (api) {
       paddleApi = api;
       paddleState = "ready";
+      try { localStorage.setItem("wxOcrReady", "1"); } catch (e) {}
       engineStatus("识别引擎已就绪（PaddleOCR），可以扫码了");
       return api;
     }).catch(function (e) {
       paddleState = "failed";
       paddlePromise = null;
+      try { localStorage.removeItem("wxOcrReady"); } catch (e2) {}
       engineStatus("主引擎加载失败：" + (e && e.message ? e.message : e) + "，将用备用引擎识别");
       throw e;
     });
@@ -1583,6 +1589,20 @@
   syncClock();
   initBattery();
   render();
+
+  // 上次成功加载过就自动恢复（模型已缓存，不用再手点）
+  try {
+    if (localStorage.getItem("wxOcrReady") === "1") {
+      engineStatus("正在恢复识别引擎（已缓存，稍等）…");
+      setTimeout(function () {
+        ensureEngine().then(function () {
+          engineStatus("识别引擎已就绪（PaddleOCR），可以扫码了");
+        }).catch(function () {
+          engineStatus("识别引擎恢复失败，扫码时会用备用引擎");
+        });
+      }, 800);
+    }
+  } catch (e) {}
 })();
 </script>
 </body>
