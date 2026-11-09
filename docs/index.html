@@ -1750,27 +1750,29 @@
         engineStatus("识别超时，用已有结果继续");
         return { text: "", src: "timeout" };
       })]).then(function (pick) {
-        return { text: pick && pick.text ? pick.text : "" };
+        return { text: pick && pick.text ? pick.text : "", src: pick && pick.src ? pick.src : "" };
       }).then(function (r) {
+        var fromBaidu = r.src === "baidu";
         var c1 = normText(r.text);
         var inner1 = innerOf(c1);
-        // * 容易被认成 坟/土/太 这类字；括号内太短或含可疑字，就放大二值化再认一遍
-        var starish = /[坟坎土丈太犬大叉乂乄㐅xX×✕·]/;
-        var needRetry = !!strip && inner1 !== null &&
-          (inner1.length <= 2 || starish.test(inner1) || !/[\u4e00-\u9fa5A-Za-z0-9]/.test(inner1));
-        if (!needRetry) return fixMaskedName(c1);
+        // 只看星号以外的字判断"像不像"，别把 * 当成可疑字
+        var core1 = (inner1 || "").replace(/\*/g, "").replace(/[·.]/g, "");
+        var starish = /[坟坎土丈太犬大叉乂乄㐅xX×✕]/;
+        var needRetry = !fromBaidu && !!strip && inner1 !== null &&
+          (core1.length === 0 || starish.test(core1) || !/[\u4e00-\u9fa5A-Za-z0-9]/.test(core1));
+        if (!needRetry) return { text: fixMaskedName(c1), src: r.src };
 
         setOcrStatus("名字有点糊，放大再认一次…");
         return ocrStrip(stripHighRes(strip)).then(function (r2) {
           var a = fixMaskedName(c1);
           var b = fixMaskedName(normText(r2.text));
           var ia = innerOf(a) || "", ib = innerOf(b) || "";
-          if (ib.length > ia.length) return b;
-          if (ia.length > ib.length) return a;
-          return b;
-        }).catch(function () { return fixMaskedName(c1); });
-      }).then(function (clean) {
-        return refineWithGlyphs(clean, info);
+          return { text: (ib.length > ia.length ? b : (ia.length > ib.length ? a : b)), src: "tess" };
+        }).catch(function () { return { text: fixMaskedName(c1), src: r.src }; });
+      }).then(function (res) {
+        return res.src === "baidu"
+          ? Promise.resolve(res.text)
+          : refineWithGlyphs(res.text, info);
       }).then(function (clean) {
         return normalizeMaskedName(clean, info);
       }).then(function (clean) {
