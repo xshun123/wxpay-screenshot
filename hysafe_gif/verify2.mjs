@@ -1,0 +1,26 @@
+import { CDP, pickBlankPage, sleep } from './cdp.mjs';
+import fs from 'node:fs';
+const url = 'file:///C:/Users/Administrato_i2t0cbm/Desktop/' + encodeURIComponent('hysafe动图') + '/viewer.html';
+const page = await pickBlankPage();
+const c = await CDP.connect(page.webSocketDebuggerUrl);
+await c.send('Page.enable'); await c.send('Runtime.enable'); await c.send('Page.bringToFront');
+await c.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+await c.send('Page.navigate', { url });
+await sleep(2200);
+const box = JSON.parse(await c.eval("(()=>{const r=document.querySelectorAll('.shot')[1].getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)})})()"));
+await c.eval("document.querySelectorAll('.shot')[1].click()");
+await sleep(700);
+fs.writeFileSync('v2_viewer.png', await c.screenshot());
+const d = JSON.parse(await c.eval("(()=>{const r=document.getElementById('vdone').getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),fromBottom: Math.round(innerHeight-(r.y+r.height))})})()"));
+console.log('doneBtn', JSON.stringify(d));
+// pinch test via touch events
+await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{x:150,y:400,id:1},{x:240,y:400,id:2}] });
+await c.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{x:100,y:400,id:1},{x:290,y:400,id:2}] });
+await c.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+await sleep(400);
+console.log('after pinch scale:', await c.eval("document.getElementById('vimg').style.transform"));
+fs.writeFileSync('v2_pinch.png', await c.screenshot());
+await c.eval("document.getElementById('vdone').click()");
+await sleep(500);
+console.log('closed:', await c.eval("!document.getElementById('viewer').classList.contains('on')"), 'bodyOverflow:', await c.eval("document.body.style.overflow || '(empty)'"));
+c.close();

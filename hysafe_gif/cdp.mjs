@@ -48,7 +48,7 @@ export class CDP {
     return r.result?.value;
   }
   async screenshot(clip) {
-    const params = { format: 'png' };
+    const params = { format: 'png', optimizeForSpeed: true };
     if (clip) params.clip = { ...clip, scale: 1 };
     const r = await this.send('Page.captureScreenshot', params);
     return Buffer.from(r.data, 'base64');

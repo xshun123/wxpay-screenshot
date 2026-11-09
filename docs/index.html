@@ -84,6 +84,19 @@
   .scanStrip.on{display:block}
   .scanStrip img{display:block;width:100%;height:auto;border-radius:4px}
   .hidden{display:none!important}
+  #viewer{position:fixed;inset:0;background:rgba(8,9,12,.97);display:none;z-index:30;flex-direction:column}
+  #viewer.on{display:flex}
+  #viewer .vTop{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;color:#cfd4dc;font-size:13px}
+  #viewer .vTop b{font-weight:600;color:#fff;font-size:14px}
+  #vClose{padding:7px 14px;border-radius:10px;border:1px solid #2c333d;background:#1a1f26;color:#dfe4ea;font-size:13px;font-family:inherit}
+  #viewer .vBody{flex:1;overflow:hidden;position:relative;touch-action:none}
+  #viewer img{position:absolute;left:50%;top:50%;transform-origin:center center;
+    max-width:none;user-select:none;-webkit-user-drag:none;border-radius:10px;box-shadow:0 12px 44px rgba(0,0,0,.65)}
+  #viewer .vHint{text-align:center;color:#79808c;font-size:11.5px;padding:4px 0 10px}
+  #viewer .vBar{display:flex;gap:10px;padding:0 16px 24px}
+  #viewer .vBar button{flex:1;padding:14px 0;border-radius:12px;border:0;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+  #vSave{background:var(--accent);color:#04210f}
+  #vDownload{background:#1b2129;color:#dfe4ea;border:1px solid #2a3140}
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
     background:rgba(16,18,22,.92);color:#fff;padding:10px 18px;border-radius:22px;font-size:13.5px;
     opacity:0;pointer-events:none;transition:.2s;z-index:10;border:1px solid rgba(255,255,255,.12);max-width:86vw;text-align:center}
@@ -241,6 +254,15 @@
 </main>
 
 <footer>本页仅用于截图排版 / 界面演示。生成内容为本地渲染图片。</footer>
+<div id="viewer">
+  <div class="vTop"><b>预览</b><span>双指缩放 · 双击放大</span><button id="vClose">关闭</button></div>
+  <div class="vBody" id="vBody"><img id="vImg" alt="支付成功"></div>
+  <div class="vHint">iPhone：长按图片 →「存储到照片」；安卓：点下面按钮或长按保存</div>
+  <div class="vBar">
+    <button id="vSave">保存到相册</button>
+    <button id="vDownload">下载 PNG</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -469,7 +491,7 @@
     text(amt, ax + signW + spaceW, 311, { size: 44, weight: 600 });
 
     if (state.showDone) {
-      var bw = 204, bh = 46, bx = (W - bw) / 2, by = 470;
+      var bw = 204, bh = 46, bx = (W - bw) / 2, by = 636;
       fillRR(bx, by, bw, bh, 8, C.btnBg);
       text(state.done || "完成", W / 2, by + 30, { size: 17, weight: 500, align: "center", color: C.ink });
     }
@@ -1278,9 +1300,130 @@
     toast("已重置");
   });
 
-  document.getElementById("btnSaveTop").addEventListener("click", savePng);
+  /* ---------- 预览 / 捏合缩放 / 保存到相册 ---------- */
+  var viewer = document.getElementById("viewer");
+  var vBody = document.getElementById("vBody");
+  var vImg = document.getElementById("vImg");
+  var vScale = 1, vTx = 0, vTy = 0;
+
+  function applyViewer() {
+    vImg.style.transform = "translate(-50%,-50%) translate(" + vTx + "px," + vTy + "px) scale(" + vScale + ")";
+  }
+
+  function openViewer() {
+    vImg.src = cv.toDataURL("image/png");
+    var w = Math.min(window.innerWidth * 0.92, 430);
+    vImg.style.width = Math.round(w) + "px";
+    vScale = 1; vTx = 0; vTy = 0;
+    applyViewer();
+    viewer.classList.add("on");
+  }
+
+  function closeViewer() {
+    viewer.classList.remove("on");
+    vImg.src = "";
+  }
+
+  document.getElementById("vClose").addEventListener("click", closeViewer);
+
+  // 指针手势：单指拖动、双指缩放、双击切换
+  var pointers = {};
+  var startDist = 0, startScale = 1, startTx = 0, startTy = 0, startX = 0, startY = 0;
+  var lastTap = 0;
+
+  function pCount() { return Object.keys(pointers).length; }
+  function pDist() {
+    var ids = Object.keys(pointers);
+    var a = pointers[ids[0]], b = pointers[ids[1]];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  function pMid() {
+    var ids = Object.keys(pointers);
+    var a = pointers[ids[0]], b = pointers[ids[1]];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  vBody.addEventListener("pointerdown", function (e) {
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    try { vBody.setPointerCapture(e.pointerId); } catch (err) {}
+    if (pCount() === 2) { startDist = pDist(); startScale = vScale; }
+    if (pCount() === 1) {
+      startX = e.clientX; startY = e.clientY; startTx = vTx; startTy = vTy;
+      var now = Date.now();
+      if (now - lastTap < 280) {
+        vScale = vScale > 1.2 ? 1 : 2.2;
+        vTx = 0; vTy = 0;
+        applyViewer();
+      }
+      lastTap = now;
+    }
+  });
+
+  vBody.addEventListener("pointermove", function (e) {
+    if (!pointers[e.pointerId]) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pCount() === 2 && startDist > 0) {
+      var d = pDist();
+      var ns = Math.max(1, Math.min(5, startScale * (d / startDist)));
+      vScale = ns;
+      applyViewer();
+    } else if (pCount() === 1 && vScale > 1.02) {
+      vTx = startTx + (e.clientX - startX);
+      vTy = startTy + (e.clientY - startY);
+      applyViewer();
+    }
+  });
+
+  function endPointer(e) {
+    delete pointers[e.pointerId];
+    if (pCount() < 2) startDist = 0;
+    if (pCount() === 0 && vScale <= 1.05) { vTx = 0; vTy = 0; applyViewer(); }
+  }
+  vBody.addEventListener("pointerup", endPointer);
+  vBody.addEventListener("pointercancel", endPointer);
+  vBody.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    vScale = Math.max(1, Math.min(5, vScale * (e.deltaY < 0 ? 1.1 : 0.9)));
+    applyViewer();
+  }, { passive: false });
+
+  function downloadPng() {
+    var url = cv.toDataURL("image/png");
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = stamp();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast("已开始下载");
+  }
+
+  function saveToAlbum() {
+    if (!cv.toBlob) { downloadPng(); return; }
+    cv.toBlob(function (blob) {
+      if (!blob) { downloadPng(); return; }
+      var file;
+      try {
+        file = new File([blob], stamp(), { type: "image/png" });
+      } catch (e) { downloadPng(); return; }
+
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        navigator.share({ files: [file], title: "支付成功", text: "支付成功" })
+          .then(function () { toast("选「存储图像 / 保存到照片」即可进相册", 2600); })
+          .catch(function () { downloadPng(); });
+        return;
+      }
+      downloadPng();
+      toast("已下载，去相册/下载目录查看", 2400);
+    }, "image/png");
+  }
+
+  document.getElementById("vSave").addEventListener("click", saveToAlbum);
+  document.getElementById("vDownload").addEventListener("click", downloadPng);
+
+  document.getElementById("btnSaveTop").addEventListener("click", openViewer);
   document.getElementById("btnCopy").addEventListener("click", copyPng);
-  document.getElementById("btnSave").addEventListener("click", savePng);
+  document.getElementById("btnSave").addEventListener("click", openViewer);
 
   /* 启动 */
   applyTplVisibility();
