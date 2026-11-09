@@ -147,7 +147,13 @@
     <p class="desc">字段即时生效，左上预览就是最终导出效果。</p>
 
     <div class="scanCard">
-      <div class="scanHead"><b>从收款码识别</b><button class="miniBtn primary" id="btnScan">选收款码</button></div>
+      <div class="scanHead"><b>从收款码识别</b>
+        <div style="display:flex;gap:8px">
+          <button class="miniBtn" id="btnEngine">加载识别引擎</button>
+          <button class="miniBtn primary" id="btnScan">选收款码</button>
+        </div>
+      </div>
+      <div class="hint" id="scanState" style="margin:0 0 6px">识别引擎未加载。可以先点「加载识别引擎」看进度，也可以直接扫码（会自动加载）。</div>
       <div class="scanPreview" id="scanPreview"><img id="scanAvatar" alt=""><span id="scanText">已抠出头像</span></div>
       <div class="scanStrip" id="scanStrip"><img id="scanStripImg" alt=""></div>
     </div>
@@ -1074,33 +1080,80 @@
     return c;
   }
 
-  /* ---- 主力识别引擎：PaddleOCR（PP-OCRv2，中文准确率比 Tesseract 高） ---- */
+  /* ---- 主力识别引擎：PaddleOCR（PP-OCRv2）—— 带下载进度 / 超时 / 手动加载 ---- */
+  var paddleApi = null;
   var paddlePromise = null;
+  var paddleState = "idle"; // idle | loading | ready | failed
 
-  function loadPaddle() {
-    if (window.paddlejs && window.paddlejs.ocr) return Promise.resolve(window.paddlejs.ocr);
-    if (paddlePromise) return paddlePromise;
-    paddlePromise = new Promise(function (resolve, reject) {
-      var s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/@paddlejs-models/ocr@1.2.4/lib/index.js";
-      s.async = true;
-      s.onload = function () {
-        var api = window.paddlejs && window.paddlejs.ocr;
-        if (api) resolve(api); else reject(new Error("paddle 未挂载"));
+  function engineStatus(msg) {
+    var el = document.getElementById("scanState");
+    if (el) el.textContent = msg;
+  }
+
+  function downloadWithProgress(url, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", url, true);
+      xhr.responseType = "text";
+      xhr.onprogress = function (e) {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
       };
-      s.onerror = function () { paddlePromise = null; reject(new Error("paddle 加载失败")); };
-      document.head.appendChild(s);
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+        else reject(new Error("HTTP " + xhr.status));
+      };
+      xhr.onerror = function () { reject(new Error("网络错误")); };
+      xhr.ontimeout = function () { reject(new Error("下载超时")); };
+      xhr.timeout = 120000;
+      xhr.send();
+    });
+  }
+
+  function ensureEngine() {
+    if (paddleState === "ready" && paddleApi) return Promise.resolve(paddleApi);
+    if (paddlePromise) return paddlePromise;
+    paddleState = "loading";
+    engineStatus("下载识别引擎 0%…");
+    paddlePromise = downloadWithProgress(
+      "https://cdn.jsdelivr.net/npm/@paddlejs-models/ocr@1.2.4/lib/index.js",
+      function (loaded, total) {
+        var p = Math.round(loaded * 100 / total);
+        engineStatus("下载识别引擎 " + p + "%（" + (loaded / 1048576).toFixed(1) + " / " + (total / 1048576).toFixed(1) + " MB）");
+      }
+    ).then(function (code) {
+      engineStatus("下载完成，初始化引擎…");
+      try { (0, eval)(code); } catch (e) { throw new Error("执行失败"); }
+      var api = window.paddlejs && window.paddlejs.ocr;
+      if (!api) throw new Error("paddle 未挂载");
+
+      var t0 = Date.now();
+      var timer = setInterval(function () {
+        engineStatus("初始化模型… 已用 " + Math.round((Date.now() - t0) / 1000) + "s（首次约 10MB 模型）");
+      }, 800);
+
+      var initP = api.init().then(function () { clearInterval(timer); return api; });
+      var timeoutP = new Promise(function (_, rej) {
+        setTimeout(function () { clearInterval(timer); rej(new Error("初始化超时")); }, 45000);
+      });
+      return Promise.race([initP, timeoutP]);
     }).then(function (api) {
-      return api.init().then(function () { return api; });
-    }).catch(function (e) { paddlePromise = null; throw e; });
+      paddleApi = api;
+      paddleState = "ready";
+      engineStatus("识别引擎已就绪（PaddleOCR），可以扫码了");
+      return api;
+    }).catch(function (e) {
+      paddleState = "failed";
+      paddlePromise = null;
+      engineStatus("主引擎加载失败：" + (e && e.message ? e.message : e) + "，将用备用引擎识别");
+      throw e;
+    });
     return paddlePromise;
   }
 
   function paddleOcr(canvas) {
-    setOcrStatus("正在识别（PaddleOCR 引擎）…");
-    return loadPaddle().then(function (api) {
-      return api.recognize(canvas);
-    }).then(function (res) {
+    if (paddleState !== "ready" || !paddleApi) return Promise.reject(new Error("engine not ready"));
+    engineStatus("PaddleOCR 识别中…");
+    return paddleApi.recognize(canvas).then(function (res) {
       return (res && res.text) ? String(res.text) : "";
     });
   }
@@ -1181,13 +1234,17 @@
      改成点「选收款码」时才加载，识别完 90 秒无操作自动释放。 */
 
   document.getElementById("btnScan").addEventListener("click", function () {
+    engineStatus("打开相册…");
     pickImage(function (img) {
+      engineStatus("图片已读入（" + img.width + "×" + img.height + "），正在定位二维码…");
       var info = null;
       try { info = analyzePoster(img); } catch (e) { info = null; }
       if (!info || !info.qr) {
-        toast("没在这张图里找到收款码，换一张原始截图试试", 2600);
+        engineStatus("没在这张图里找到二维码，换一张完整、不带裁切的收款码截图");
+        toast("没找到二维码，换一张原图试试", 2600);
         return;
       }
+      engineStatus("已定位二维码，正在抠头像…");
 
       // 头像
       var avatarCanvas = cropAvatar(info);
@@ -1218,14 +1275,25 @@
         return (t || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
       }
 
-      var nameTry = paddleOcr(strip).then(function (t) { return { engine: "paddle", text: t }; }).catch(function () { return null; });
+      // 两个引擎同时跑：PaddleOCR 准、Tesseract 快；谁给出像样结果用谁
+      var pP = (paddleState === "ready"
+          ? paddleOcr(strip)
+          : ensureEngine().then(function () { return paddleOcr(strip); }))
+        .then(function (t) { return t; }).catch(function () { return ""; });
+      var tP = ocrStrip(strip).then(function (r) { return r.text; }).catch(function () { return ""; });
 
-      Promise.race([nameTry, timeout.then(function () { return null; })]).then(function (res) {
-        if (res && res.text && normText(res.text).replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "").length >= 2) {
-          return { text: res.text };
+      Promise.race([
+        Promise.all([pP, tP]).then(function (arr) { return { paddle: arr[0], tess: arr[1] }; }),
+        timeout.then(function () { return null; })
+      ]).then(function (both) {
+        var text = "";
+        if (both) {
+          var pc = normText(both.paddle || "");
+          var pcLen = pc.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "").length;
+          text = (pcLen >= 2) ? both.paddle : (both.tess || "");
+          engineStatus(pcLen >= 2 ? "PaddleOCR 识别完成" : "备用引擎识别完成");
         }
-        setOcrStatus("主引擎没认出来，换备用引擎…");
-        return ocrStrip(strip).then(function (r) { return { text: r.text }; });
+        return { text: text };
       }).then(function (r) {
         var c1 = normText(r.text);
         var inner1 = innerOf(c1);
@@ -1459,6 +1527,11 @@
 
   document.getElementById("vSave").addEventListener("click", saveToAlbum);
   document.getElementById("vDownload").addEventListener("click", downloadPng);
+
+  document.getElementById("btnEngine").addEventListener("click", function () {
+    if (paddleState === "ready") { engineStatus("识别引擎已就绪（PaddleOCR）"); toast("引擎已就绪"); return; }
+    ensureEngine().then(function () { toast("识别引擎已就绪"); }).catch(function () {});
+  });
 
   document.getElementById("btnSaveTop").addEventListener("click", openViewer);
   document.getElementById("btnCopy").addEventListener("click", copyPng);
