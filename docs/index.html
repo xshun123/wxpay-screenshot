@@ -816,8 +816,82 @@
     });
   }
 
-  /* 打码名里的最后一个真名常常被 Tesseract 吞掉，按字块切分单独认一次 */
+  /* 逐字识别：把名字行切成字块，大字单独认，小字当 *，重建成 xxx(**X) */
+  function glyphOcr(info) {
+    var gs = info.glyphs;
+    if (!gs || gs.length < 3) return Promise.resolve("");
+    var maxH = 0;
+    for (var i = 0; i < gs.length; i++) if (gs[i][3] > maxH) maxH = gs[i][3];
+    var starH = maxH * 0.62;
+
+    var jobs = [];
+    for (var j = 0; j < gs.length; j++) {
+      var g = gs[j];
+      if (g[3] <= starH) { jobs.push({ ch: "*" }); continue; }
+      jobs.push({ glyph: g, idx: j });
+    }
+
+    // 括号：又高又窄
+    for (var q = 0; q < jobs.length; q++) {
+      var jb = jobs[q];
+      if (!jb.glyph) continue;
+      var gg = jb.glyph;
+      if (gg[3] >= maxH * 0.8 && gg[2] <= gg[3] * 0.72) {
+        jobs[q] = { ch: "(" , glyph: null };
+      }
+    }
+    // 只保留第一个 '(' 之后到结尾，并把倒数第二个 '(' 视作 ')'
+    var open = -1;
+    for (var o = 0; o < jobs.length; o++) if (jobs[o].ch === "(") { open = o; break; }
+    if (open < 0) return Promise.resolve("");
+
+    var tail = jobs.slice(open);
+    // 最后一个高窄块当作 ')'
+    for (var t = tail.length - 1; t >= 1; t--) {
+      if (tail[t].glyph) {
+        var tg = tail[t].glyph;
+        if (tg[3] >= maxH * 0.8 && tg[2] <= tg[3] * 0.72) { tail[t] = { ch: ")" }; break; }
+      }
+    }
+
+    var seq = [];
+    var chain = Promise.resolve();
+    tail.forEach(function (jb2, pos) {
+      chain = chain.then(function () {
+        if (jb2.ch) { seq.push(jb2.ch); return; }
+        var g2 = jb2.glyph;
+        var pad2 = 3;
+        var cx2 = Math.max(0, g2[0] - pad2), cy2 = Math.max(0, g2[1] - pad2);
+        var cw2 = Math.min(info.iw - cx2, g2[2] + pad2 * 2), ch2 = Math.min(info.ih - cy2, g2[3] + pad2 * 2);
+        var k3 = 8;
+        var cc2 = document.createElement("canvas");
+        cc2.width = cw2 * k3; cc2.height = ch2 * k3;
+        var g3 = cc2.getContext("2d");
+        g3.imageSmoothingEnabled = true;
+        g3.drawImage(info.canvas, cx2, cy2, cw2, ch2, 0, 0, cc2.width, cc2.height);
+        return ocrStripSingle(cc2).then(function (txt2) {
+          var m2 = String(txt2 || "").replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "");
+          seq.push(m2 ? m2.charAt(0) : "*");
+        }).catch(function () { seq.push("*"); });
+      });
+    });
+
+    return chain.then(function () {
+      var prefix = "";
+      for (var p2 = 0; p2 < open; p2++) {
+        if (jobs[p2].ch) prefix += jobs[p2].ch;
+      }
+      return prefix + seq.join("");
+    });
+  }
+
   function refineWithGlyphs(clean, info) {
+    // 逐字重建实测比整行更差，这里只做"最后一个字单独认"的兜底
+    return refineLastChar(clean, info);
+  }
+
+  /* 兜底：只把最后那个真名单独再认一次 */
+  function refineLastChar(clean, info) {
     if (!info || !info.glyphs || info.glyphs.length < 4) return Promise.resolve(clean);
     var inner = innerOf(clean);
     if (inner === null) return Promise.resolve(clean);
@@ -1151,13 +1225,69 @@
     }
 
     var kMin = Math.max(8, Math.round(Math.min(qw, qh) * 0.10));
-    var kMax = Math.round(Math.min(qw, qh) * 0.42);
+    var kMax = Math.round(Math.min(qw, qh) * 0.46);
     var bestK = kMin;
     for (var kk = kMin; kk <= kMax; kk++) {
       if (ringFrac(kk) > 0.12) break;
       bestK = kk;
     }
-    var abox = [ccx - bestK, ccy - bestK, bestK * 2, bestK * 2];
+
+    // 再用"彩色照片块"连通域校正一次：含白边的头像，环形扫描会切小
+    var photoBox = null;
+    try {
+      var cx0 = Math.max(qx0 + 2, ccx - bestK - 6), cx1 = Math.min(qx1 - 2, ccx + bestK + 6);
+      var cy0 = Math.max(qy0 + 2, ccy - bestK - 6), cy1 = Math.min(qy1 - 2, ccy + bestK + 6);
+      var pv = new Uint8Array((cx1 - cx0 + 1) * (cy1 - cy0 + 1));
+      function photoish(px5, py5) {
+        var i7 = (py5 * iw + px5) * 4;
+        var r7 = d[i7], g7 = d[i7 + 1], b7 = d[i7 + 2];
+        var l7 = 0.299 * r7 + 0.587 * g7 + 0.114 * b7;
+        var s7 = Math.max(r7, g7, b7) - Math.min(r7, g7, b7);
+        return s7 > 18 || (l7 > 62 && l7 < 200);
+      }
+      var seedX = -1, seedY = -1;
+      for (var rr5 = 0; rr5 < 12 && seedX < 0; rr5++) {
+        var tx5 = ccx + (rr5 % 2 === 0 ? rr5 : -rr5), ty5 = ccy;
+        if (tx5 > cx0 && tx5 < cx1 && photoish(tx5, ty5)) { seedX = tx5; seedY = ty5; }
+      }
+      if (seedX < 0 && photoish(ccx, ccy)) { seedX = ccx; seedY = ccy; }
+      if (seedX >= 0) {
+        var wCells = cx1 - cx0 + 1;
+        var stack2 = [[seedX, seedY]];
+        pv[(seedY - cy0) * wCells + (seedX - cx0)] = 1;
+        var bMinX = seedX, bMaxX = seedX, bMinY = seedY, bMaxY = seedY, cnt = 0;
+        while (stack2.length) {
+          var pt = stack2.pop();
+          var pxx = pt[0], pyy = pt[1];
+          cnt++;
+          if (pxx < bMinX) bMinX = pxx;
+          if (pxx > bMaxX) bMaxX = pxx;
+          if (pyy < bMinY) bMinY = pyy;
+          if (pyy > bMaxY) bMaxY = pyy;
+          var dirs = [[pxx - 1, pyy], [pxx + 1, pyy], [pxx, pyy - 1], [pxx, pyy + 1]];
+          for (var d5 = 0; d5 < 4; d5++) {
+            var nx7 = dirs[d5][0], ny7 = dirs[d5][1];
+            if (nx7 < cx0 || nx7 > cx1 || ny7 < cy0 || ny7 > cy1) continue;
+            var vi7 = (ny7 - cy0) * wCells + (nx7 - cx0);
+            if (pv[vi7]) continue;
+            pv[vi7] = 1;
+            if (photoish(nx7, ny7)) stack2.push([nx7, ny7]);
+          }
+        }
+        var pbw = bMaxX - bMinX + 1, pbh = bMaxY - bMinY + 1;
+        if (cnt > 400 && pbw >= bestK * 1.2 && pbw < qw * 0.72 && pbh < qh * 0.72) {
+          var sideP = Math.round(Math.max(pbw, pbh) * 1.04);
+          var pcx = Math.round((bMinX + bMaxX) / 2), pcy = Math.round((bMinY + bMaxY) / 2);
+          var px0b = Math.max(qx0, pcx - Math.round(sideP / 2));
+          var py0b = Math.max(qy0, pcy - Math.round(sideP / 2));
+          photoBox = [px0b, py0b, Math.min(sideP, iw - px0b), Math.min(sideP, ih - py0b)];
+        }
+      }
+    } catch (e) {}
+
+    var abox = (photoBox && photoBox[2] > 24 && photoBox[3] > 24)
+      ? photoBox
+      : [ccx - bestK, ccy - bestK, bestK * 2, bestK * 2];
 
     // 名字：QR 下方那行深色文字
     var nameBox = null;
