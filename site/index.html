@@ -232,7 +232,10 @@
 
     <div class="field">
       <label>电池电量</label>
-      <div class="ctrl"><input type="text" id="inBattery" value="69" maxlength="3" inputmode="numeric"></div>
+      <div class="ctrl">
+        <input type="text" id="inBattery" value="69" maxlength="3" inputmode="numeric">
+        <span id="batHint" style="font-size:11.5px;color:#9aa0a8;white-space:nowrap"></span>
+      </div>
     </div>
 
     <div class="field">
@@ -885,6 +888,36 @@
     });
   }
 
+  /* 用字块几何校正 # 号数量：括号里前面的小字块就是 * */
+  function normalizeMaskedName(text, info) {
+    var t = String(text || "");
+    var mm = t.match(/^([^()]{2,24})\(([^()]{1,12})\)$/);
+    if (!mm) return t;
+    if (!info || !info.glyphs || info.glyphs.length < 4) return t;
+
+    var gs = info.glyphs;
+    var maxH = 0;
+    for (var i = 0; i < gs.length; i++) if (gs[i][3] > maxH) maxH = gs[i][3];
+    if (!maxH) return t;
+
+    var big = [];
+    for (var j = 0; j < gs.length; j++) if (gs[j][3] > maxH * 0.62) big.push(j);
+    if (big.length < 2) return t;
+
+    var charIdx = big[big.length - 2];
+    var starN = 0;
+    for (var k = charIdx - 1; k >= 0; k--) {
+      if (gs[k][3] <= maxH * 0.62) starN++;
+      else break;
+    }
+    if (starN < 1 || starN > 6) return t;
+
+    var inner = mm[2].replace(/\*/g, "");
+    if (!inner) return t;
+    var lastChar = inner.slice(-1);
+    return mm[1] + "(" + new Array(starN + 1).join("*") + lastChar + ")";
+  }
+
   function refineWithGlyphs(clean, info) {
     // 逐字重建实测比整行更差，这里只做"最后一个字单独认"的兜底
     return refineLastChar(clean, info);
@@ -1424,25 +1457,46 @@
       });
   }
 
+  // 三个接口额度独立，一个用完自动换下一个
+  var BAIDU_APIS = ["general_basic", "accurate_basic", "general"];
+
+  function baiduCall(tok, api, b64) {
+    var body = "image=" + encodeURIComponent(b64) +
+      "&language_type=CHN_ENG&detect_direction=false&paragraph=false";
+    return fetch("https://aip.baidubce.com/rest/2.0/ocr/v1/" + api + "?access_token=" + encodeURIComponent(tok), {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || j.error_code) {
+        var e2 = new Error((j && j.error_msg) || "baidu error");
+        e2.code = j ? j.error_code : -1;
+        throw e2;
+      }
+      var words = (j.words_result || []).map(function (w) { return w.words || ""; });
+      var pick = "";
+      for (var i = 0; i < words.length; i++) {
+        if (words[i].indexOf("(") >= 0 || words[i].indexOf("（") >= 0) { pick = words[i]; break; }
+      }
+      if (!pick && words.length) pick = words.join("");
+      return String(pick).replace(/\s+/g, "");
+    });
+  }
+
   function baiduOcr(canvas) {
     return getBaiduToken().then(function (tok) {
       var b64 = canvas.toDataURL("image/png").split(",")[1];
-      var body = "image=" + encodeURIComponent(b64) +
-        "&language_type=CHN_ENG&detect_direction=false&paragraph=false";
-      return fetch("https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=" + encodeURIComponent(tok), {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body
-      }).then(function (r) { return r.json(); }).then(function (j) {
-        if (!j || j.error_code) throw new Error((j && j.error_msg) || "baidu error");
-        var words = (j.words_result || []).map(function (w) { return w.words || ""; });
-        var pick = "";
-        for (var i = 0; i < words.length; i++) {
-          if (words[i].indexOf("(") >= 0 || words[i].indexOf("（") >= 0) { pick = words[i]; break; }
-        }
-        if (!pick && words.length) pick = words.join("");
-        return String(pick).replace(/\s+/g, "");
-      });
+      var idx = 0;
+      function next() {
+        if (idx >= BAIDU_APIS.length) throw new Error("百度接口都失败了");
+        var api = BAIDU_APIS[idx++];
+        return baiduCall(tok, api, b64).catch(function (e) {
+          // 17=配额用完 18=QPS超限 19=请求量超限 => 换接口
+          engineStatus("百度 " + api + " 不可用（" + (e.message || e.code) + "），换下一个…");
+          return next();
+        });
+      }
+      return next();
     });
   }
 
@@ -1713,6 +1767,8 @@
       }).then(function (clean) {
         return refineWithGlyphs(clean, info);
       }).then(function (clean) {
+        return normalizeMaskedName(clean, info);
+      }).then(function (clean) {
         if (clean && clean.length >= 2) {
           if (state.tpl === "alipay") {
             state.merchant = clean.slice(0, 16);
@@ -1966,6 +2022,11 @@
   syncClock();
   initBattery();
   render();
+
+  try {
+    var batHint = document.getElementById("batHint");
+    if (batHint) batHint.textContent = navigator.getBattery ? "自动读取中" : "手动填";
+  } catch (e) {}
 
   if (isIOS) {
     var engBtn = document.getElementById("btnEngine");
