@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>支付成功截图生成器 · 微信 / 支付宝</title>
+<meta name="description" content="在线生成微信 / 支付宝「支付成功」截图：头像、商户、金额自定义，收款码自动抠头像识别名字，无水印，纯本地渲染。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307C160'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='%23fff' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0e1014; --panel:#fff; --ink:#191919; --muted:#8a8f99; --line:#e6e8ec;
+    --accent:#07C160; --blue:#4A87F0; --blueDark:#3A74D8; --warn:#f2555a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#1b2029 0%,var(--bg) 55%);color:#e8eaee;
+    font:15px/1.55 -apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;min-height:100%;overflow-x:hidden}
+  header{max-width:1080px;margin:0 auto;padding:26px 20px 4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.2px}
+  header .tag{font-size:12px;color:#8fd8ac;background:rgba(7,193,96,.12);border:1px solid rgba(7,193,96,.35);
+    padding:3px 9px;border-radius:20px}
+  header .sub{font-size:12.5px;color:var(--muted)}
+  .tplSwitch{margin-left:auto;display:flex;gap:6px;background:#191d24;border:1px solid #262c36;padding:4px;border-radius:12px}
+  .tplSwitch button{border:0;background:transparent;color:#8b93a1;padding:7px 14px;border-radius:9px;font-size:13.5px;
+    cursor:pointer;font-family:inherit;transition:.15s}
+  .tplSwitch button.on{background:#fff;color:#111;font-weight:600}
+  main{max-width:1080px;margin:0 auto;padding:16px 20px 48px;display:grid;grid-template-columns:minmax(320px,400px) 1fr;gap:22px;align-items:start}
+  .stage{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .phone{background:#fff;border-radius:26px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
+  .phone canvas{display:block;width:100%;height:auto;background:#fff}
+  .actions{display:flex;gap:10px}
+  .btn{flex:1;padding:13px 0;border-radius:12px;border:0;font-size:14.5px;font-weight:600;cursor:pointer;
+    font-family:inherit;background:var(--accent);color:#04210f;transition:.15s}
+  .btn:hover{filter:brightness(1.06)}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{background:#1c212a;color:#d9dde4;border:1px solid #2a3140;font-weight:500}
+  .panel{background:var(--panel);color:var(--ink);border-radius:18px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.45);min-width:0}
+  .panel h2{margin:0 0 4px;font-size:17px;font-weight:600;color:#111}
+  .panel .desc{margin:0 0 16px;font-size:12.5px;color:#9aa0a8}
+  .field{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+  .field > label{flex:0 0 92px;font-size:14px;color:#33383f}
+  .field label .req{color:var(--warn);margin-right:2px}
+  .field .ctrl{flex:1;min-width:0;display:flex;gap:8px;align-items:center}
+  .field input[type=text],.field select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+    background:#f7f8fa;font-size:15px;color:#111;outline:none;font-family:inherit;transition:.15s}
+  .field input:focus,.field select:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(74,135,240,.12)}
+  .avatarBox{width:64px;height:64px;border-radius:50%;background:#f0f2f5 center/cover no-repeat;
+    display:flex;align-items:center;justify-content:center;color:#b6bcc6;font-size:11px;flex:0 0 64px;
+    border:1px solid var(--line);cursor:pointer;overflow:hidden;position:relative}
+  .avatarBox img{width:100%;height:100%;object-fit:cover;display:block}
+  .avatarBox .badge{position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:50%;
+    background:var(--warn);color:#fff;font-size:12px;display:none;align-items:center;justify-content:center;
+    box-shadow:0 0 0 2px #fff;line-height:1;font-style:normal}
+  .avatarBox.has .badge{display:flex}
+  .miniBtn{padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:#fff;color:#33383f;
+    font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;flex:0 0 auto}
+  .miniBtn:hover{background:#f4f6f9}
+  .miniBtn.primary{border-color:var(--blue);color:var(--blue);background:rgba(74,135,240,.06)}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:9px 0;border-radius:9px;border:1px solid var(--line);background:#fff;
+    color:#6b7280;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .seg button.on{border-color:var(--blue);color:var(--blue);background:rgba(74,135,240,.07);font-weight:600}
+  .seg button.on.green{border-color:var(--accent);color:var(--accent);background:rgba(7,193,96,.07)}
+  .switchRow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-top:1px solid #f0f1f4}
+  .switchRow span{font-size:14px;color:#33383f}
+  .switch{width:46px;height:26px;border-radius:20px;background:#dfe2e7;border:0;cursor:pointer;position:relative;transition:.18s;flex:0 0 46px}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.18s}
+  .switch.on{background:var(--blue)}
+  .switch.on::after{transform:translateX(20px)}
+  .panelFoot{display:flex;gap:12px;margin-top:18px}
+  .panelFoot button{flex:1;padding:13px 0;border-radius:10px;font-size:15px;font-weight:600;border:0;cursor:pointer;font-family:inherit}
+  #btnReset{background:#f1f3f6;color:#5b616b}
+  #btnSave{background:var(--blue);color:#fff}
+  #btnSave:hover{background:var(--blueDark)}
+  .note{margin-top:14px;font-size:12px;color:#9aa0a8;line-height:1.7}
+  .note b{color:#5b616b;font-weight:600}
+  .scanCard{background:#f7f8fa;border:1px dashed #d9dde3;border-radius:12px;padding:12px;margin:0 0 14px}
+  .scanCard .scanHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .scanCard .scanHead b{font-size:13.5px;color:#33383f;font-weight:600}
+  .scanPreview{display:none;align-items:center;gap:10px;margin-top:8px;font-size:12.5px;color:#6b7280}
+  .scanPreview img{width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid #e2e5ea}
+  .scanPreview.on{display:flex}
+  .scanStrip{display:none;margin-top:8px;padding:6px;background:#fff;border:1px solid #e6e8ec;border-radius:8px}
+  .scanStrip.on{display:block}
+  .scanStrip img{display:block;width:100%;height:auto;border-radius:4px}
+  .hidden{display:none!important}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
+    background:rgba(16,18,22,.92);color:#fff;padding:10px 18px;border-radius:22px;font-size:13.5px;
+    opacity:0;pointer-events:none;transition:.2s;z-index:10;border:1px solid rgba(255,255,255,.12);max-width:86vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  footer{max-width:1080px;margin:0 auto;padding:0 20px 40px;font-size:12px;color:#5f6672}
+  @media (max-width:860px){
+    main{grid-template-columns:minmax(0,1fr);gap:18px}
+    .stage{order:1}.panel{order:2}
+    .phone{max-width:400px;margin:0 auto}
+    .actions{max-width:400px;margin:0 auto;width:100%}
+    header h1{font-size:17px}
+    .tplSwitch{margin-left:0;width:100%;justify-content:space-between}
+    .tplSwitch button{flex:1}
+  }
+  @media (max-width:520px){
+    main{padding:12px 14px 36px;gap:14px}
+    header{padding:20px 14px 4px}
+    .panel{padding:16px;border-radius:14px}
+    .field{flex-wrap:wrap;gap:8px}
+    .field > label{flex:1 0 100%;font-size:13.5px;margin:0}
+    .field .ctrl{flex:1 1 100%}
+    .panelFoot{flex-direction:column-reverse}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>支付成功截图生成器</h1>
+  <span class="tag" id="tplTag">微信</span>
+  <span class="sub">无水印 · 纯本地渲染 · 收款码自动抠头像</span>
+  <div class="tplSwitch">
+    <button data-tpl="wechat" class="on">微信</button>
+    <button data-tpl="alipay">支付宝</button>
+  </div>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="phone"><canvas id="cv" width="750" height="1624"></canvas></div>
+    <div class="actions">
+      <button class="btn" id="btnSaveTop">保存 PNG</button>
+      <button class="btn ghost" id="btnCopy">复制图片</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>修改支付信息</h2>
+    <p class="desc">字段即时生效，左上预览就是最终导出效果。</p>
+
+    <div class="scanCard">
+      <div class="scanHead"><b>从收款码识别</b><button class="miniBtn primary" id="btnScan">选收款码</button></div>
+      <div class="scanPreview" id="scanPreview"><img id="scanAvatar" alt=""><span id="scanText">已抠出头像</span></div>
+      <div class="scanStrip" id="scanStrip"><img id="scanStripImg" alt=""></div>
+    </div>
+
+    <div class="only-wechat">
+      <div class="field">
+        <label>用户头像</label>
+        <div class="ctrl">
+          <div class="avatarBox" id="avatarBox"><span>选图</span><i class="badge">×</i></div>
+          <button class="miniBtn" id="btnAvatar">选择图片</button>
+        </div>
+      </div>
+      <div class="field">
+        <label><span class="req">*</span>商品名称</label>
+        <div class="ctrl"><input type="text" id="inName" value="**城" maxlength="24" placeholder="**城"></div>
+      </div>
+      <div class="field">
+        <label>状态文字</label>
+        <div class="ctrl"><input type="text" id="inTitle" value="支付成功" maxlength="8"></div>
+      </div>
+      <div class="field">
+        <label>状态颜色</label>
+        <div class="ctrl seg" id="segColor">
+          <button data-color="green" class="on green">微信绿</button>
+          <button data-color="blue">蓝</button>
+          <button data-color="red">红</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label><span class="req">*</span>支付金额</label>
+      <div class="ctrl">
+        <input type="text" id="inAmount" value="60.00" inputmode="decimal" placeholder="0.00">
+        <button class="miniBtn" id="btnRandom">随机</button>
+      </div>
+    </div>
+
+    <div class="only-alipay">
+      <div class="field">
+        <label><span class="req">*</span>商户名</label>
+        <div class="ctrl"><input type="text" id="inMerchant" value="阿剑" maxlength="16"></div>
+      </div>
+      <div class="field">
+        <label>付款方式</label>
+        <div class="ctrl"><input type="text" id="inPayMethod" value="账户余额" maxlength="10"></div>
+      </div>
+      <div class="field">
+        <label>红包金额</label>
+        <div class="ctrl"><input type="text" id="inRedPacket" value="2.50" maxlength="8" inputmode="decimal"></div>
+      </div>
+      <div class="field">
+        <label>广告标题</label>
+        <div class="ctrl"><input type="text" id="inAdTitle" value="他重生在暴雪那一夜" maxlength="20"></div>
+      </div>
+      <div class="switchRow"><span>显示「账单贴纸」横条</span><button class="switch on only-alipay-sw" id="swPromo"></button></div>
+      <div class="switchRow"><span>显示「支付有礼」红包卡</span><button class="switch on only-alipay-sw" id="swRed"></button></div>
+      <div class="switchRow"><span>显示「广告」卡片</span><button class="switch on only-alipay-sw" id="swAd"></button></div>
+      <div class="switchRow"><span>显示「附近神券」卡片</span><button class="switch on only-alipay-sw" id="swCoupon"></button></div>
+    </div>
+
+    <div class="field" style="margin-top:12px">
+      <label>状态栏时间</label>
+      <div class="ctrl">
+        <input type="text" id="inTime" value="15:12" maxlength="5">
+        <button class="miniBtn" id="btnTimeNow">现在</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>电池电量</label>
+      <div class="ctrl"><input type="text" id="inBattery" value="69" maxlength="3" inputmode="numeric"></div>
+    </div>
+
+    <div class="field">
+      <label>完成按钮</label>
+      <div class="ctrl"><input type="text" id="inDone" value="完成" maxlength="6"></div>
+    </div>
+
+    <div class="field">
+      <label>导出尺寸</label>
+      <div class="ctrl">
+        <select id="selScale">
+          <option value="2" selected>750 × 1624（2 倍，默认）</option>
+          <option value="3">1125 × 2436（3 倍，iPhone 大图）</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="switchRow"><span>显示手机状态栏</span><button class="switch on" id="swStatus"></button></div>
+    <div class="switchRow"><span>显示底部「完成」按钮</span><button class="switch on" id="swDone"></button></div>
+
+    <div class="panelFoot">
+      <button id="btnReset">取消 / 重置</button>
+      <button id="btnSave">确定并保存</button>
+    </div>
+
+    <p class="note">
+      <b>时间 / 电量</b>：默认自动取本机时间，并读取浏览器电池状态。<br>
+      <b>识别</b>：收款码头像在本地抠出；名字需要联网下载 OCR 语言包（首次约 11MB，之后缓存）。<br>
+      <b>隐私</b>：图片不上传服务器，全部在浏览器本地绘制。
+    </p>
+  </section>
+</main>
+
+<footer>本页仅用于截图排版 / 界面演示。生成内容为本地渲染图片。</footer>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var cv = document.getElementById("cv");
+  var ctx = cv.getContext("2d");
+  var W = 375, H = 812, SCALE = 2;
+  var FONT = '-apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
+
+  var C = {
+    white: "#FFFFFF", ink: "#191919", sub: "#333333", grey: "#8a8f99",
+    green: "#07C160", blue: "#4A87F0", red: "#FA5151", btnBg: "#F2F3F5",
+    aliBgTop: "#1B6BF2", aliBgMid: "#3E8CF8", aliBgBot: "#A9D6FF",
+    aliCard: "#FFFFFF", aliRed: "#FF3B30", aliPink: "#FFEDED"
+  };
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function nowHM() { var d = new Date(); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+
+  var state = {
+    tpl: "wechat",
+    title: "支付成功",
+    color: "green",
+    name: "**城",
+    merchant: "阿剑",
+    payMethod: "账户余额",
+    redPacket: "2.50",
+    adTitle: "他重生在暴雪那一夜",
+    showPromo: true, showRed: true, showAd: true, showCoupon: true,
+    amount: "60.00",
+    time: nowHM(),
+    battery: "69",
+    done: "完成",
+    showStatus: true,
+    showDone: true,
+    avatarImg: null,
+    autoTime: true,
+    autoBattery: true
+  };
+
+  /* ---------------- 基础绘制 ---------------- */
+  function f(size, weight) { return (weight || 400) + " " + size + "px " + FONT; }
+
+  function rr(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  function fillRR(x, y, w, h, r, color) { rr(x, y, w, h, r); ctx.fillStyle = color; ctx.fill(); }
+
+  function text(str, x, y, o) {
+    o = o || {};
+    ctx.font = f(o.size || 15, o.weight || 400);
+    ctx.fillStyle = o.color || C.ink;
+    ctx.textAlign = o.align || "left";
+    ctx.textBaseline = o.baseline || "alphabetic";
+    ctx.fillText(str, x, y);
+  }
+
+  function fitSize(str, maxW, size, weight) {
+    var s = size;
+    for (; s > 9; s -= 0.5) {
+      ctx.font = f(s, weight || 400);
+      if (ctx.measureText(str).width <= maxW) return s;
+    }
+    return 9;
+  }
+
+  /* ---------------- 状态栏 ---------------- */
+  function drawStatusBar(light) {
+    var ink = light ? "#FFFFFF" : C.ink;
+    var w = W;
+
+    // 时间：居左（iPhone 左侧信号区）
+    text(state.time, 54, 30, { size: 15.5, weight: 600, color: ink, align: "center" });
+
+    // 信号 4 格：291..308
+    for (var i = 0; i < 4; i++) {
+      var h = 3 + i * 2.4;
+      fillRR(291 + i * 4.6, 33 - h, 3.2, h, 1, ink);
+    }
+
+    // WiFi：中心 x=322
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    for (var k = 0; k < 2; k++) {
+      ctx.beginPath();
+      ctx.arc(322, 32, 4 + k * 3.6, Math.PI * 1.2, Math.PI * 1.8);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(322, 32, 1.1, 0, Math.PI * 2);
+    ctx.fillStyle = ink;
+    ctx.fill();
+
+    // 电池：x=333, 26x13
+    var pct = parseInt(String(state.battery).replace(/[^\d]/g, ""), 10);
+    if (isNaN(pct)) pct = 69;
+    pct = Math.max(0, Math.min(100, pct));
+
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 1;
+    rr(331, 23, 28, 13, 3.5);
+    ctx.stroke();
+    fillRR(360, 27, 2, 5, 1, ink);
+
+    var innerW = (28 - 3) * pct / 100;
+    if (innerW > 0.8) fillRR(332.5, 24.5, innerW, 10, 2, ink);
+    var tcol = pct >= 45 ? (light ? C.aliBgTop : "#FFFFFF") : ink;
+    var tsz = (pct >= 100 ? 7.4 : 8.6);
+    text(pct + "", 345, 33, { size: tsz, weight: 600, align: "center", color: tcol });
+  }
+
+  /* ---------------- 微信模板 ---------------- */
+  function accentWechat() {
+    if (state.color === "blue") return C.blue;
+    if (state.color === "red") return C.red;
+    return C.green;
+  }
+
+  function drawCheck(cx, cy, r, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.62, cy + r * 0.55);
+    ctx.lineTo(cx - r * 1.02, cy + r * 1.18);
+    ctx.lineTo(cx - r * 0.12, cy + r * 0.95);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = r * 0.26;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.42, cy + r * 0.02);
+    ctx.lineTo(cx - r * 0.10, cy + r * 0.34);
+    ctx.lineTo(cx + r * 0.44, cy - r * 0.34);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawAvatarCircle(cx, cy, r) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    if (state.avatarImg && state.avatarImg.width) {
+      ctx.clip();
+      var img = state.avatarImg;
+      var s = Math.max((r * 2) / img.width, (r * 2) / img.height);
+      var w = img.width * s, h = img.height * s;
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    } else {
+      ctx.fillStyle = "#E9ECF1";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.18, r * 0.32, 0, Math.PI * 2);
+      ctx.fillStyle = "#C3C9D2";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, cy + r * 0.72, r * 0.56, Math.PI * 1.02, Math.PI * 1.98);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawWechat() {
+    ctx.fillStyle = C.white;
+    ctx.fillRect(0, 0, W, H);
+
+    if (state.showStatus) drawStatusBar(false);
+    var ac = accentWechat();
+
+    ctx.font = f(17.5, 600);
+    var titleW = ctx.measureText(state.title).width;
+    var iconR = 13, gap = 9;
+    var groupW = iconR * 2 + gap + titleW;
+    var gx = (W - groupW) / 2;
+    drawCheck(gx + iconR, 80, iconR, ac);
+    text(state.title, gx + iconR * 2 + gap, 87, { size: 17.5, weight: 600, color: ac });
+
+    drawAvatarCircle(W / 2, 182, 31);
+
+    var nm = state.name || "";
+    var ns = fitSize(nm, 268, 15.5, 400);
+    text(nm, W / 2, 240, { size: ns, weight: 400, align: "center", color: C.sub });
+
+    var amt = String(state.amount || "0.00").trim();
+    if (amt.charAt(0) === "¥") amt = amt.slice(1).trim();
+    ctx.font = f(44, 600);
+    var numW = ctx.measureText(amt).width;
+    var signW = ctx.measureText("¥").width;
+    var spaceW = ctx.measureText(" ").width * 0.6;
+    var totalW = signW + spaceW + numW;
+    var ax = (W - totalW) / 2;
+    text("¥", ax, 311, { size: 44, weight: 600 });
+    text(amt, ax + signW + spaceW, 311, { size: 44, weight: 600 });
+
+    if (state.showDone) {
+      var bw = 204, bh = 46, bx = (W - bw) / 2, by = 470;
+      fillRR(bx, by, bw, bh, 8, C.btnBg);
+      text(state.done || "完成", W / 2, by + 30, { size: 17, weight: 500, align: "center", color: C.ink });
+    }
+  }
+
+  /* ---------------- 支付宝模板 ---------------- */
+  function drawAlipay() {
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, C.aliBgTop);
+    g.addColorStop(0.45, C.aliBgMid);
+    g.addColorStop(1, C.aliBgBot);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    if (state.showStatus) drawStatusBar(true);
+
+    // 顶部：✓ 支付成功 + 回首页
+    text("回首页", W - 18, 74, { size: 14, color: "rgba(255,255,255,.95)", align: "right" });
+    ctx.font = f(17.5, 600);
+    var tW = ctx.measureText("支付成功").width;
+    var g2W = 22 + 9 + tW;
+    var gx2 = (W - g2W) / 2;
+    // 圆环对勾
+    ctx.strokeStyle = "rgba(255,255,255,.95)";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(gx2 + 11, 68, 9.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gx2 + 6.5, 68.5);
+    ctx.lineTo(gx2 + 10, 72);
+    ctx.lineTo(gx2 + 16, 64);
+    ctx.lineWidth = 1.9;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    text("支付成功", gx2 + 22 + 9, 75, { size: 17.5, weight: 600, color: "#FFFFFF" });
+
+    // 金额
+    var amt = String(state.amount || "0.00").trim();
+    if (amt.charAt(0) === "¥") amt = amt.slice(1).trim();
+    ctx.font = f(42, 600);
+    var numW = ctx.measureText(amt).width;
+    var signW = ctx.measureText("¥").width;
+    var spaceW = ctx.measureText(" ").width * 0.4;
+    var totalW = signW + spaceW + numW;
+    var ax = (W - totalW) / 2;
+    text("¥", ax, 130, { size: 42, weight: 600, color: "#FFFFFF" });
+    text(amt, ax + signW + spaceW, 130, { size: 42, weight: 600, color: "#FFFFFF" });
+
+    // 两行信息
+    text(state.merchant || "阿剑", 18, 176, { size: 14.5, color: "rgba(255,255,255,.95)" });
+    text("¥ " + amt, W - 18, 176, { size: 14.5, color: "rgba(255,255,255,.95)", align: "right" });
+    text("付款方式", 18, 202, { size: 14.5, color: "rgba(255,255,255,.95)" });
+    text(state.payMethod || "账户余额", W - 18, 202, { size: 14.5, color: "rgba(255,255,255,.95)", align: "right" });
+
+    var y = 222;
+
+    // 横条
+    if (state.showPromo) {
+      fillRR(16, y, W - 32, 44, 12, "rgba(255,255,255,.18)");
+      ctx.beginPath();
+      ctx.arc(38, y + 22, 9, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,.35)";
+      ctx.fill();
+      text("账单贴纸+1", 54, y + 26, { size: 12, color: "#FFFFFF" });
+      ctx.beginPath();
+      ctx.arc(150, y + 22, 9, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,.35)";
+      ctx.fill();
+      text("蚂蚁爱心蛋+0.12", 166, y + 26, { size: 12, color: "#FFFFFF" });
+      rr(W - 16 - 74, y + 10, 74, 24, 12);
+      ctx.strokeStyle = "rgba(255,255,255,.8)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      text("一键领", W - 16 - 37, y + 26, { size: 12, color: "#FFFFFF", align: "center" });
+      y += 56;
+    }
+
+    // 支付有礼
+    if (state.showRed) {
+      var cardH = 124;
+      fillRR(16, y, W - 32, cardH, 14, C.aliCard);
+      text("支付有礼", 32, y + 26, { size: 15, weight: 600, color: C.ink });
+      // 红包图标
+      fillRR(32, y + 42, 46, 46, 12, C.aliPink);
+      ctx.fillStyle = "#FF5A5F";
+      rr(44, y + 54, 22, 26, 4);
+      ctx.fill();
+      text("完成任务可领" + (state.redPacket || "2.50") + "元红包", 90, y + 62, { size: 15, weight: 600, color: C.ink });
+      text("红包还可叠加使用", 90, y + 86, { size: 12, color: C.grey });
+      fillRR(W - 16 - 82, y + 56, 82, 34, 17, C.aliRed);
+      text("去完成", W - 16 - 41, y + 78, { size: 13.5, weight: 600, color: "#FFFFFF", align: "center" });
+      y += cardH + 12;
+    }
+
+    // 广告卡
+    if (state.showAd) {
+      var adH = 76;
+      fillRR(16, y, W - 32, adH, 14, C.aliCard);
+      text("广告", 32, y + 16, { size: 9.5, color: "#B4B9C1" });
+      fillRR(32, y + 22, 42, 42, 10, "#EFE6DC");
+      text((state.adTitle || "他重生在暴雪那一夜").charAt(0), 53, y + 50, { size: 18, weight: 500, color: "#8C7A63", align: "center" });
+      text(state.adTitle || "他重生在暴雪那一夜", 84, y + 42, { size: 14.5, weight: 600, color: C.ink });
+      fillRR(84, y + 50, 52, 18, 4, "#FFF1EC");
+      text("薏米短剧", 110, y + 63, { size: 10.5, color: "#E8603C", align: "center" });
+      fillRR(W - 16 - 74, y + 26, 74, 32, 16, C.aliRed);
+      text("去看看", W - 16 - 37, y + 47, { size: 13, weight: 600, color: "#FFFFFF", align: "center" });
+      y += adH + 12;
+    }
+
+    // 附近神券
+    if (state.showCoupon) {
+      var cH = 150;
+      fillRR(16, y, W - 32, cH, 14, C.aliCard);
+      text("附近神券", 32, y + 28, { size: 15, weight: 600, color: C.ink });
+      text("抢更多优惠", W - 92, y + 27, { size: 12, color: C.grey, align: "right" });
+      fillRR(W - 88, y + 14, 22, 20, 5, C.aliRed);
+      text("00", W - 77, y + 28, { size: 11, weight: 600, color: "#FFFFFF", align: "center" });
+      text(":", W - 63, y + 28, { size: 11, weight: 600, color: C.aliRed, align: "center" });
+      fillRR(W - 58, y + 14, 22, 20, 5, C.aliRed);
+      text("58", W - 47, y + 28, { size: 11, weight: 600, color: "#FFFFFF", align: "center" });
+      text(">", W - 27, y + 28, { size: 12, color: "#B4B9C1", align: "center" });
+
+      fillRR(32, y + 44, 86, 92, 8, "#F7EFE4");
+      text("代金券", 75, y + 68, { size: 12, weight: 600, color: "#9A6B3F", align: "center" });
+      fillRR(38, y + 76, 74, 26, 4, "#FFFFFF");
+      text("不老神", 75, y + 94, { size: 11, color: "#B03A2E", align: "center" });
+      fillRR(38, y + 104, 74, 26, 4, "#B03A2E");
+      text("70元", 75, y + 123, { size: 13, weight: 600, color: "#FFFFFF", align: "center" });
+
+      text("不老神 | 70元代金券", 130, y + 64, { size: 14.5, weight: 600, color: C.ink });
+      text("125m 步行3分钟", 130, y + 92, { size: 12, color: C.grey });
+      text("¥ 66.8", 130, y + 128, { size: 18, weight: 600, color: C.aliRed });
+      var pillW = 58, pillX = W - 16 - 12 - pillW;
+      fillRR(pillX, y + 110, pillW, 20, 10, C.aliPink);
+      text("共省3.2元", pillX + pillW / 2, y + 124, { size: 10.5, color: C.aliRed, align: "center" });
+      y += cH;
+    }
+
+    // 完成按钮
+    if (state.showDone) {
+      var bw = 140, bh = 40, bx = (W - bw) / 2, by = H - 96;
+      fillRR(bx, by, bw, bh, 20, "rgba(255,255,255,.92)");
+      text(state.done || "完成", W / 2, by + 26, { size: 16, weight: 500, align: "center", color: "#1677FF" });
+    }
+
+    // 底部支付宝水印区（很淡）
+    text("支付宝", W / 2, H - 22, { size: 11, color: "rgba(255,255,255,.65)", align: "center" });
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function render() {
+    cv.width = W * SCALE;
+    cv.height = H * SCALE;
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (state.tpl === "alipay") drawAlipay();
+    else drawWechat();
+  }
+
+  /* ---------------- 导出 ---------------- */
+  function stamp() {
+    var d = new Date();
+    return "pay_" + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) +
+      "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()) + ".png";
+  }
+
+  function toast(msg, ms) {
+    var el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("on");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { el.classList.remove("on"); }, ms || 1800);
+  }
+
+  function savePng() {
+    var url = cv.toDataURL("image/png");
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = stamp();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast("已下载 " + a.download);
+  }
+
+  function copyPng() {
+    var url = cv.toDataURL("image/png");
+    if (!navigator.clipboard || !window.ClipboardItem) { toast("这个浏览器不支持复制图片，用保存"); return; }
+    fetch(url).then(function (r) { return r.blob(); }).then(function (blob) {
+      return navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    }).then(function () { toast("已复制到剪贴板"); })
+      .catch(function () { toast("复制失败，用保存"); });
+  }
+
+  /* ---------------- 输入绑定 ---------------- */
+  function bind(id, key, transform) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", function () {
+      state[key] = transform ? transform(el.value) : el.value;
+      render();
+    });
+  }
+
+  bind("inName", "name");
+  bind("inTitle", "title");
+  bind("inMerchant", "merchant");
+  bind("inPayMethod", "payMethod");
+  bind("inRedPacket", "redPacket");
+  bind("inAdTitle", "adTitle");
+  bind("inDone", "done");
+  bind("inTime", "time", function (v) { state.autoTime = false; return v; });
+  bind("inBattery", "battery", function (v) {
+    state.autoBattery = false;
+    var n = v.replace(/[^\d]/g, "").slice(0, 3);
+    if (n !== "") n = String(Math.min(100, parseInt(n, 10)));
+    return n;
+  });
+
+  var amountEl = document.getElementById("inAmount");
+  amountEl.addEventListener("input", function () { state.amount = amountEl.value; render(); });
+  amountEl.addEventListener("blur", function () {
+    var v = parseFloat(String(amountEl.value).replace(/[^\d.]/g, ""));
+    if (!isNaN(v)) { amountEl.value = v.toFixed(2); state.amount = amountEl.value; render(); }
+  });
+
+  document.getElementById("btnRandom").addEventListener("click", function () {
+    var n = Math.floor(Math.random() * 9000 + 100) / 100;
+    amountEl.value = n.toFixed(2);
+    state.amount = amountEl.value;
+    render();
+    toast("金额已随机");
+  });
+
+  document.getElementById("btnTimeNow").addEventListener("click", function () {
+    state.autoTime = true;
+    state.time = nowHM();
+    document.getElementById("inTime").value = state.time;
+    render();
+    toast("已设为当前时间");
+  });
+
+  /* 模板切换 */
+  document.querySelectorAll(".tplSwitch button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".tplSwitch button").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+      state.tpl = b.getAttribute("data-tpl");
+      applyTplVisibility();
+      render();
+    });
+  });
+
+  function applyTplVisibility() {
+    var isWx = state.tpl === "wechat";
+    document.querySelectorAll(".only-wechat").forEach(function (n) { n.classList.toggle("hidden", !isWx); });
+    document.querySelectorAll(".only-alipay").forEach(function (n) { n.classList.toggle("hidden", isWx); });
+    document.getElementById("tplTag").textContent = isWx ? "微信" : "支付宝";
+  }
+
+  /* 状态颜色 */
+  document.querySelectorAll("#segColor button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("#segColor button").forEach(function (x) { x.classList.remove("on"); x.classList.remove("green"); });
+      b.classList.add("on");
+      if (b.getAttribute("data-color") === "green") b.classList.add("green");
+      state.color = b.getAttribute("data-color");
+      render();
+    });
+  });
+
+  /* 开关 */
+  function bindSwitch(id, key) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("click", function () {
+      state[key] = !state[key];
+      el.classList.toggle("on", state[key]);
+      render();
+    });
+  }
+  bindSwitch("swStatus", "showStatus");
+  bindSwitch("swDone", "showDone");
+  bindSwitch("swPromo", "showPromo");
+  bindSwitch("swRed", "showRed");
+  bindSwitch("swAd", "showAd");
+  bindSwitch("swCoupon", "showCoupon");
+
+  /* 导出尺寸 */
+  document.getElementById("selScale").addEventListener("change", function () {
+    SCALE = parseInt(this.value, 10) || 2;
+    render();
+    toast("导出尺寸已切换");
+  });
+
+  /* 头像 */
+  var avatarBox = document.getElementById("avatarBox");
+  function setAvatar(img) {
+    state.avatarImg = img;
+    if (img) {
+      avatarBox.innerHTML = "";
+      var im = document.createElement("img");
+      im.src = img.src;
+      avatarBox.appendChild(im);
+      var badge = document.createElement("i");
+      badge.className = "badge";
+      badge.textContent = "×";
+      avatarBox.appendChild(badge);
+      avatarBox.classList.add("has");
+    } else {
+      avatarBox.innerHTML = "<span>选图</span><i class=\"badge\">×</i>";
+      avatarBox.classList.remove("has");
+    }
+    render();
+  }
+
+  function pickImage(cb, maxSide) {
+    maxSide = maxSide || 1400;
+    var inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.onchange = function () {
+      var file = inp.files && inp.files[0];
+      if (!file) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        var img = new Image();
+        img.onload = function () { cb(img); };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    };
+    inp.click();
+  }
+
+  document.getElementById("btnAvatar").addEventListener("click", function () {
+    pickImage(function (img) {
+      var s = Math.min(1, 720 / Math.max(img.width, img.height));
+      var c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * s));
+      c.height = Math.max(1, Math.round(img.height * s));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      var dataUrl = c.toDataURL("image/jpeg", 0.9);
+      var out = new Image();
+      out.onload = function () { setAvatar(out); toast("头像已更新"); };
+      out.src = dataUrl;
+    });
+  });
+
+  avatarBox.addEventListener("click", function (e) {
+    if (e.target && e.target.className === "badge") { setAvatar(null); toast("头像已清除"); return; }
+    document.getElementById("btnAvatar").click();
+  });
+
+  /* ---------------- 收款码：抠头像 + 识别名字 ---------------- */
+  function analyzePoster(img) {
+    var maxSide = 900;
+    var s = Math.min(1, maxSide / Math.max(img.width, img.height));
+    var c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.width * s));
+    c.height = Math.max(1, Math.round(img.height * s));
+    var g = c.getContext("2d");
+    g.drawImage(img, 0, 0, c.width, c.height);
+    var iw = c.width, ih = c.height;
+    var d = g.getImageData(0, 0, iw, ih).data;
+
+    function rgbAt(x, y) {
+      var i = (y * iw + x) * 4;
+      return [d[i], d[i + 1], d[i + 2]];
+    }
+    function lumAt(x, y) {
+      var i = (y * iw + x) * 4;
+      return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    }
+    function binaryish(x, y) {
+      var i = (y * iw + x) * 4;
+      var r = d[i], gg = d[i + 1], b = d[i + 2];
+      var l = 0.299 * r + 0.587 * gg + 0.114 * b;
+      var sat = Math.max(r, gg, b) - Math.min(r, gg, b);
+      return (l < 62 || l > 214) && sat < 24;
+    }
+    function darkText(x, y) {
+      var i = (y * iw + x) * 4;
+      var r = d[i], gg = d[i + 1], b = d[i + 2];
+      var l = 0.299 * r + 0.587 * gg + 0.114 * b;
+      var sat = Math.max(r, gg, b) - Math.min(r, gg, b);
+      return l < 150 && sat < 70;
+    }
+
+    var xa = Math.floor(iw * 0.08), xb = Math.floor(iw * 0.92);
+    var ya = Math.floor(ih * 0.08), yb = Math.floor(ih * 0.78);
+
+    var rowCnt = new Int32Array(ih);
+    for (var y = ya; y <= yb; y++) {
+      var cnt = 0;
+      for (var x = xa; x <= xb; x += 2) if (lumAt(x, y) < 100) cnt++;
+      rowCnt[y] = cnt * 2;
+    }
+    var rowThr = iw * 0.15;
+    var qy0 = -1, qy1 = -1;
+    for (var y2 = ya; y2 <= yb; y2++) {
+      if (rowCnt[y2] > rowThr) { if (qy0 < 0) qy0 = y2; qy1 = y2; }
+    }
+    if (qy0 < 0) return null;
+
+    var colCnt = new Int32Array(iw);
+    for (var x2 = xa; x2 <= xb; x2++) {
+      var cc = 0;
+      for (var y3 = qy0; y3 <= qy1; y3 += 2) if (lumAt(x2, y3) < 100) cc++;
+      colCnt[x2] = cc * 2;
+    }
+    var colThr = (qy1 - qy0 + 1) * 0.15;
+    var qx0 = -1, qx1 = -1;
+    for (var x3 = xa; x3 <= xb; x3++) {
+      if (colCnt[x3] > colThr) { if (qx0 < 0) qx0 = x3; qx1 = x3; }
+    }
+    if (qx0 < 0) return null;
+
+    var qw = qx1 - qx0 + 1, qh = qy1 - qy0 + 1;
+    if (qh > qw * 1.15) { qy1 = qy0 + qw - 1; qh = qw; }
+    if (qw > qh * 1.15) { qx1 = qx0 + qh - 1; qw = qh; }
+
+    var ccx = Math.round((qx0 + qx1) / 2), ccy = Math.round((qy0 + qy1) / 2);
+
+    // 头像：从 QR 中心向外量到"二维码模块"为止，得到照片方块
+    function ringFrac(k) {
+      var x0 = ccx - k, x1 = ccx + k, y0 = ccy - k, y1 = ccy + k;
+      if (x0 < 0 || y0 < 0 || x1 >= iw || y1 >= ih) return 1;
+      var tot = 0, bad = 0, ring = 2;
+      for (var xx = x0; xx <= x1; xx++) {
+        for (var yy = y0; yy < y0 + ring; yy++) { tot++; if (binaryish(xx, yy)) bad++; }
+        for (var yy2 = y1 - ring + 1; yy2 <= y1; yy2++) { tot++; if (binaryish(xx, yy2)) bad++; }
+      }
+      for (var yy3 = y0; yy3 <= y1; yy3++) {
+        for (var xx2 = x0; xx2 < x0 + ring; xx2++) { tot++; if (binaryish(xx2, yy3)) bad++; }
+        for (var xx3 = x1 - ring + 1; xx3 <= x1; xx3++) { tot++; if (binaryish(xx3, yy3)) bad++; }
+      }
+      return bad / Math.max(1, tot);
+    }
+
+    var kMin = Math.max(8, Math.round(Math.min(qw, qh) * 0.10));
+    var kMax = Math.round(Math.min(qw, qh) * 0.42);
+    var bestK = kMin;
+    for (var kk = kMin; kk <= kMax; kk++) {
+      if (ringFrac(kk) > 0.12) break;
+      bestK = kk;
+    }
+    var abox = [ccx - bestK, ccy - bestK, bestK * 2, bestK * 2];
+
+    // 名字：QR 下方那行深色文字
+    var nameBox = null;
+    var bandY0 = Math.min(ih - 1, qy1 + Math.round(qh * 0.04));
+    var bandY1 = Math.min(ih - 1, qy1 + Math.round(qh * 0.42));
+    var minX = iw, maxX = 0, minY = ih, maxY = 0, found = 0;
+    for (var yy4 = bandY0; yy4 <= bandY1; yy4++) {
+      for (var xx4 = qx0; xx4 <= qx1; xx4++) {
+        if (darkText(xx4, yy4)) {
+          found++;
+          if (xx4 < minX) minX = xx4;
+          if (xx4 > maxX) maxX = xx4;
+          if (yy4 < minY) minY = yy4;
+          if (yy4 > maxY) maxY = yy4;
+        }
+      }
+    }
+    if (found > 30 && (maxY - minY) >= 6 && (maxY - minY) <= qh * 0.35) {
+      nameBox = [minX, minY, maxX - minX + 1, maxY - minY + 1];
+    }
+
+    return { canvas: c, iw: iw, ih: ih, qr: [qx0, qy0, qw, qh], avatar: abox, name: nameBox, scale: s };
+  }
+
+  function cropAvatar(info) {
+    var a = info.avatar;
+    var c = document.createElement("canvas");
+    c.width = 240; c.height = 240;
+    var g = c.getContext("2d");
+    g.drawImage(info.canvas, a[0], a[1], a[2], a[3], 0, 0, 240, 240);
+
+    // 去掉右下角绿色徽标：在绿色像素包围盒内用上方像素覆盖
+    try {
+      var id = g.getImageData(0, 0, 240, 240);
+      var dd = id.data;
+      var gx0 = 999, gy0 = 999, gx1 = -1, gy1 = -1;
+      for (var y = 120; y < 240; y++) {
+        for (var x = 120; x < 240; x++) {
+          var i = (y * 240 + x) * 4;
+          var r = dd[i], gg = dd[i + 1], bb = dd[i + 2];
+          if (gg > r + 32 && gg > bb + 22 && gg > 100) {
+            if (x < gx0) gx0 = x;
+            if (y < gy0) gy0 = y;
+            if (x > gx1) gx1 = x;
+            if (y > gy1) gy1 = y;
+          }
+        }
+      }
+      if (gx1 > gx0 && gy1 > gy0) {
+        var pad = 2;
+        var x0 = Math.max(0, gx0 - pad), x1 = Math.min(239, gx1 + pad);
+        var y0 = Math.max(0, gy0 - pad), y1 = Math.min(239, gy1 + pad);
+        var hgt = y1 - y0 + 1;
+        for (var yy = y0; yy <= y1; yy++) {
+          for (var xx = x0; xx <= x1; xx++) {
+            var si = ((Math.max(0, yy - hgt - 1)) * 240 + xx) * 4;
+            var di = (yy * 240 + xx) * 4;
+            dd[di] = dd[si];
+            dd[di + 1] = dd[si + 1];
+            dd[di + 2] = dd[si + 2];
+            dd[di + 3] = 255;
+          }
+        }
+        g.putImageData(id, 0, 0);
+      }
+    } catch (e) {}
+
+    return c;
+  }
+
+  function cropNameStrip(info) {
+    if (!info.name) return null;
+    var n = info.name;
+    var pad = 8;
+    var x = Math.max(0, n[0] - pad);
+    var y = Math.max(0, n[1] - pad);
+    var w = Math.min(info.iw - x, n[2] + pad * 2);
+    var h = Math.min(info.ih - y, n[3] + pad * 2);
+    var k = 3;
+    var c = document.createElement("canvas");
+    c.width = w * k; c.height = h * k;
+    var g = c.getContext("2d");
+    g.imageSmoothingEnabled = true;
+    g.drawImage(info.canvas, x, y, w, h, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  var tesseractPromise = null;
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve();
+    if (tesseractPromise) return tesseractPromise;
+    tesseractPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      s.async = true;
+      s.onload = function () { resolve(); };
+      s.onerror = function () { tesseractPromise = null; reject(new Error("tesseract 加载失败")); };
+      document.head.appendChild(s);
+    });
+    return tesseractPromise;
+  }
+
+  function ocrStrip(canvas) {
+    return loadTesseract().then(function () {
+      return Tesseract.createWorker("chi_sim", 1, { logger: function () {} });
+    }).then(function (worker) {
+      return worker.setParameters({ tessedit_pageseg_mode: "7" }).then(function () {
+        return worker.recognize(canvas);
+      }).then(function (res) {
+        var txt = (res && res.data && res.data.text) || "";
+        return worker.terminate().then(function () {
+          return txt.replace(/\s+/g, "").replace(/[|丨]/g, "").trim();
+        });
+      });
+    });
+  }
+
+  document.getElementById("btnScan").addEventListener("click", function () {
+    pickImage(function (img) {
+      var info = null;
+      try { info = analyzePoster(img); } catch (e) { info = null; }
+      if (!info || !info.qr) {
+        toast("没在这张图里找到收款码，换一张原始截图试试", 2600);
+        return;
+      }
+
+      // 头像
+      var avatarCanvas = cropAvatar(info);
+      var avatarUrl = avatarCanvas.toDataURL("image/jpeg", 0.92);
+      var av = new Image();
+      av.onload = function () {
+        setAvatar(av);
+        document.getElementById("scanPreview").classList.add("on");
+        document.getElementById("scanAvatar").src = avatarUrl;
+        document.getElementById("scanText").textContent = "头像已抠出";
+      };
+      av.src = avatarUrl;
+
+      // 名字
+      var strip = cropNameStrip(info);
+      if (!strip) {
+        toast("头像已设置；没找到名字那一行", 2200);
+        return;
+      }
+      document.getElementById("scanStrip").classList.add("on");
+      document.getElementById("scanStripImg").src = strip.toDataURL("image/png");
+
+      document.getElementById("scanText").textContent = "头像已抠出，正在识别名字…";
+      toast("正在识别名字（首次需下载语言包，约 11MB）…", 4000);
+
+      ocrStrip(strip).then(function (txt) {
+        var clean = (txt || "").replace(/^[·.,，。:：\-—\s]+|[·.,，。:：\-—\s]+$/g, "");
+        if (clean.length >= 2) {
+          if (state.tpl === "alipay") {
+            state.merchant = clean.slice(0, 16);
+            document.getElementById("inMerchant").value = state.merchant;
+          } else {
+            state.name = clean.slice(0, 24);
+            document.getElementById("inName").value = state.name;
+          }
+          document.getElementById("scanText").textContent = "已识别：" + clean;
+          render();
+          toast("识别完成：" + clean, 2600);
+        } else {
+          document.getElementById("scanText").textContent = "头像已抠出；名字没认出来";
+          toast("名字没认出来，手动改一下", 2400);
+        }
+      }).catch(function (e) {
+        document.getElementById("scanText").textContent = "头像已抠出；名字需要联网识别";
+        toast("OCR 加载失败（" + (e && e.message ? e.message : "网络") + "），名字手填一下", 3200);
+      });
+    }, 1600);
+  });
+
+  /* 自动时间 / 电量 */
+  function syncClock() {
+    if (!state.autoTime) return;
+    var t = nowHM();
+    if (state.time !== t) {
+      state.time = t;
+      var el = document.getElementById("inTime");
+      if (el) el.value = t;
+      render();
+    }
+  }
+  setInterval(syncClock, 15000);
+
+  function initBattery() {
+    if (!navigator.getBattery) { state.autoBattery = false; return; }
+    navigator.getBattery().then(function (b) {
+      function apply() {
+        if (!state.autoBattery) return;
+        var p = Math.round((b.level || 0) * 100);
+        state.battery = String(p);
+        var el = document.getElementById("inBattery");
+        if (el) el.value = p;
+        render();
+      }
+      apply();
+      b.addEventListener("levelchange", apply);
+    }).catch(function () { state.autoBattery = false; });
+  }
+
+  /* 重置 */
+  document.getElementById("btnReset").addEventListener("click", function () {
+    state.title = "支付成功";
+    state.color = "green";
+    state.name = "**城";
+    state.merchant = "阿剑";
+    state.payMethod = "账户余额";
+    state.redPacket = "2.50";
+    state.adTitle = "他重生在暴雪那一夜";
+    state.showPromo = state.showRed = state.showAd = state.showCoupon = true;
+    state.amount = "60.00";
+    state.time = nowHM();
+    state.battery = "69";
+    state.done = "完成";
+    state.showStatus = true;
+    state.showDone = true;
+    state.autoTime = true;
+    state.autoBattery = true;
+    setAvatar(null);
+
+    document.getElementById("inName").value = "**城";
+    document.getElementById("inMerchant").value = "阿剑";
+    document.getElementById("inPayMethod").value = "账户余额";
+    document.getElementById("inRedPacket").value = "2.50";
+    document.getElementById("inAdTitle").value = "他重生在暴雪那一夜";
+    document.getElementById("inAmount").value = "60.00";
+    document.getElementById("inTime").value = state.time;
+    document.getElementById("inBattery").value = "69";
+    document.getElementById("inDone").value = "完成";
+    ["swPromo", "swRed", "swAd", "swCoupon", "swStatus", "swDone"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.add("on");
+    });
+    document.querySelectorAll("#segColor button").forEach(function (x) { x.classList.remove("on"); x.classList.remove("green"); });
+    var gbtn = document.querySelector('#segColor button[data-color="green"]');
+    gbtn.classList.add("on");
+    gbtn.classList.add("green");
+    document.getElementById("scanPreview").classList.remove("on");
+    document.getElementById("scanStrip").classList.remove("on");
+    render();
+    toast("已重置");
+  });
+
+  document.getElementById("btnSaveTop").addEventListener("click", savePng);
+  document.getElementById("btnCopy").addEventListener("click", copyPng);
+  document.getElementById("btnSave").addEventListener("click", savePng);
+
+  /* 启动 */
+  applyTplVisibility();
+  syncClock();
+  initBattery();
+  render();
+})();
+</script>
+</body>
+</html>

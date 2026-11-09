@@ -1,0 +1,35 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.cinder.wxtransfer'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.cinder.wxtransfer'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '3.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        resources.excludes += 'META-INF/*'
+    }
+}
+
+dependencies {
+    // 纯 Java 二维码解码，无 AndroidX；离线打包在 libs/ 里
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}

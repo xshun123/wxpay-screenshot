@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>微信转账模拟器</title>
+<style>
+  :root{--bg:#111;--fg:#eee;--accent:#07C160;--line:#2a2a2a;--muted:#888;--card:#181818}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.5 "PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:440px;margin:0 auto;padding:12px 12px 30px}
+  .stage{display:flex;justify-content:center;padding:6px 0 12px}
+  canvas{width:100%;max-width:345px;height:auto;border-radius:14px;
+    box-shadow:0 10px 34px rgba(0,0,0,.65);background:#EDEDED;display:block}
+  .seg{display:flex;gap:5px;margin:0 0 12px}
+  .seg button{flex:1;padding:9px 0;border:1px solid var(--line);border-radius:9px;
+    background:#1a1a1a;color:var(--muted);font-size:12.5px;font-family:inherit}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#04210f;font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin:0 0 10px}
+  .cardTitle{display:flex;align-items:center;justify-content:space-between;
+    font-size:12.5px;color:var(--muted);margin:0 2px 8px}
+  .row{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+  .row:last-child{margin-bottom:0}
+  .row label{width:72px;flex:0 0 72px;color:var(--muted);font-size:12.5px}
+  .row input,.row select,.row textarea{flex:1;min-width:0;padding:8px 10px;border-radius:9px;
+    border:1px solid var(--line);background:#1a1a1a;color:var(--fg);font-size:13.5px;
+    font-family:inherit;outline:none}
+  .row input:focus,.row select:focus,.row textarea:focus{border-color:var(--accent)}
+  .row textarea{resize:vertical;min-height:88px;line-height:1.5}
+  button{font-family:inherit}
+  .pick{flex:1;padding:8px 0;border-radius:9px;border:1px solid var(--line);background:#242424;color:var(--fg);font-size:13px}
+  .pick.primary{border-color:var(--accent);color:var(--accent)}
+  .mini{padding:4px 10px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px}
+  .ghost{flex:0 0 auto;width:44px;border-radius:9px;border:1px solid var(--line);background:#1a1a1a;color:var(--muted);font-size:13px}
+  .hint{font-size:11.5px;color:#666;line-height:1.55;margin:6px 2px 0;word-break:break-all}
+  .recRow{display:grid;grid-template-columns:repeat(3,1fr) 34px;gap:6px;margin:0 0 6px}
+  .recRow input,.recRow select{min-width:0;padding:7px 8px;border-radius:8px;border:1px solid var(--line);
+    background:#1a1a1a;color:var(--fg);font-size:12.5px;font-family:inherit;outline:none}
+  .recRow .del{border-radius:8px;border:1px solid #3a2626;background:#241a1a;color:#c96;font-size:14px}
+  .payeeRow{display:flex;align-items:center;gap:8px;margin:0 0 6px;padding:6px;border:1px solid var(--line);border-radius:9px;background:#1c1c1c}
+  .payeeRow img{width:30px;height:30px;border-radius:50%;object-fit:cover;flex:0 0 30px;background:#333}
+  .payeeRow .pn{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .payeeRow button{padding:5px 9px;border-radius:7px;font-size:12px;border:1px solid var(--line);background:#262626;color:var(--fg)}
+  .payeeRow button.danger{color:#e08a8a;border-color:#3a2626;background:#241a1a}
+  .empty{font-size:11.5px;color:#666;padding:2px}
+  #camBox{position:fixed;inset:0;background:#000;display:none;z-index:20}
+  #camBox.on{display:block}
+  #camBox video{width:100%;height:100%;object-fit:cover}
+  #camBox .camMask{position:absolute;left:50%;top:50%;width:62vw;height:62vw;max-width:300px;max-height:300px;
+    transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.85);border-radius:14px}
+  #camBox .camBar{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:#fff;font-size:13px}
+  #camBox .camClose{position:absolute;top:18px;right:18px;width:38px;height:38px;border-radius:50%;
+    background:rgba(0,0,0,.55);color:#fff;border:0;font-size:20px}
+  .actions{display:flex;gap:9px;margin-top:14px}
+  .actions button{flex:1;padding:12px 0;border:0;border-radius:11px;
+    background:var(--accent);color:#04210f;font-size:14.5px;font-weight:700}
+  .actions button.ghostBtn{background:#1a1a1a;color:var(--fg);border:1px solid var(--line);font-weight:500}
+  #toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(14px);
+    background:rgba(0,0,0,.86);color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;
+    opacity:0;pointer-events:none;transition:.22s;z-index:9;max-width:86vw}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage"><canvas id="cv" width="750" height="1624"></canvas></div>
+
+  <div class="seg">
+    <button data-view="chat" class="on">聊天</button>
+    <button data-view="detail">转账详情</button>
+    <button data-view="pay">付款页</button>
+    <button data-view="records">转账记录</button>
+  </div>
+
+  <div class="card">
+    <div class="row"><label>我的昵称</label><input id="meName" value="我"></div>
+    <div class="row"><label>对方昵称</label><input id="peerName" value="张三"></div>
+    <div class="row"><label>金额</label><input id="amount" value="200.00" inputmode="decimal"></div>
+    <div class="row"><label>转账说明</label><input id="note" value="饭钱"></div>
+    <div class="row"><label>状态</label>
+      <select id="status">
+        <option value="pending" selected>待收款</option>
+        <option value="received">已收款</option>
+        <option value="returned">已退还</option>
+      </select>
+    </div>
+    <div class="row"><label>时间</label><input id="time" value="10:24"></div>
+    <div class="row"><label>日期分隔</label><input id="divider" value="今天 10:20"></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><label>我的头像</label><button class="pick" id="btnMe">选图片</button><button class="ghost" id="clrMe">清</button></div>
+    <div class="row"><label>对方头像</label><button class="pick" id="btnPeer">选图片</button><button class="ghost" id="clrPeer">清</button></div>
+    <div class="hint">对方头像就是你扫码/转账的那个人。建议用正方形图。</div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>聊天内容</span></div>
+    <textarea id="lines" spellcheck="false">对方：在吗？上次那顿饭我先帮你垫了
+我：多少来着，我转你
+对方：200
+我：[转账]200.00:饭钱:待收款</textarea>
+    <div class="hint">一行一条：对方：xxx ｜ 我：xxx ｜ [转账]金额:说明:状态 ｜ [收款]金额:说明:状态</div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>转账记录</span><button class="mini" id="addRec">+ 加一笔</button></div>
+    <div id="recList"></div>
+    <div class="hint">支出 = 我转给对方，收入 = 对方转给我。</div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>扫一扫</span></div>
+    <div class="row">
+      <button class="pick primary" id="btnQr">相册选码</button>
+      <button class="pick" id="btnCam">相机扫</button>
+    </div>
+    <div class="hint" id="scanInfo">选一张微信收款码截图，识别后自动进付款页。</div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>收款人档案</span><button class="mini" id="savePayee">存当前</button></div>
+    <div id="payeeList"></div>
+    <div class="hint">同一个收款码再从相册扫一次，会自动带出这里存的昵称和头像。</div>
+  </div>
+
+<div id="camBox">
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="camMask"></div>
+  <div class="camBar">把收款码放进框里，自动识别</div>
+  <button class="camClose" id="camClose">×</button>
+</div>
+
+  <div class="actions">
+    <button id="save">保存 PNG</button>
+    <button id="copy" class="ghostBtn">复制</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var cv = document.getElementById("cv");
+  var ctx = cv.getContext("2d");
+  var W = 375, SCALE = 2, H = 812;
+  var FONT = '"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
+  var C = {
+    bg: "#EDEDED", white: "#FFFFFF", ink: "#191919", sub: "#888888",
+    faint: "#B2B2B2", hair: "#D9D9D9", green: "#07C160",
+    bubbleSelf: "#95EC69", orange: "#FA9D3B", grey: "#9A9A9A",
+    blue: "#5B8DEF", red: "#FA5151"
+  };
+
+  var state = {
+    view: "chat",
+    me: { name: "我", img: null },
+    peer: { name: "张三", img: null },
+    amount: "200.00",
+    note: "饭钱",
+    status: "pending",
+    time: "10:24",
+    divider: "今天 10:20",
+    payStatus: "pending",
+    scan: { code: "", ok: false },
+    lines: [
+      { type: "text", side: "left", text: "在吗？上次那顿饭我先帮你垫了" },
+      { type: "text", side: "right", text: "多少来着，我转你" },
+      { type: "text", side: "left", text: "200" },
+      { type: "transfer", side: "right", amount: "200.00", note: "饭钱", status: "pending" }
+    ],
+    records: [
+      { dir: "out", amount: "200.00", name: "张三", note: "饭钱", time: "今天 10:24", status: "已收款" },
+      { dir: "in", amount: "88.00", name: "张三", note: "奶茶", time: "昨天 15:02", status: "已收款" },
+      { dir: "out", amount: "520.00", name: "张三", note: "生日", time: "3月12日 20:11", status: "已收款" }
+    ]
+  };
+
+  /* ---------------- 基础绘制 ---------------- */
+  function f(size, weight) { return (weight || 400) + " " + size + "px " + FONT; }
+
+  function rr(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  function fillRR(x, y, w, h, r, color) {
+    rr(x, y, w, h, r);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function hline(y, x0, x1) {
+    ctx.strokeStyle = C.hair;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x0, y + 0.25);
+    ctx.lineTo(x1, y + 0.25);
+    ctx.stroke();
+  }
+
+  function text(str, x, y, o) {
+    o = o || {};
+    ctx.font = f(o.size || 15, o.weight || 400);
+    ctx.fillStyle = o.color || C.ink;
+    ctx.textAlign = o.align || "left";
+    ctx.textBaseline = o.baseline || "alphabetic";
+    ctx.fillText(str, x, y);
+  }
+
+  function wrap(str, maxW, size) {
+    ctx.font = f(size || 15, 400);
+    var out = [], line = "";
+    for (var i = 0; i < str.length; i++) {
+      var t = line + str.charAt(i);
+      if (ctx.measureText(t).width > maxW && line) { out.push(line); line = str.charAt(i); }
+      else line = t;
+    }
+    if (line) out.push(line);
+    return out.length ? out : [""];
+  }
+
+  function statusLabel(s) {
+    if (s === "received" || s === "已收款") return "已收款";
+    if (s === "returned" || s === "已退还") return "已退还";
+    return "待收款";
+  }
+
+  function accentOf(s) {
+    var l = statusLabel(s);
+    if (l === "已收款") return C.green;
+    if (l === "已退还") return C.grey;
+    return C.orange;
+  }
+
+  /* ---------------- 头像 ---------------- */
+  function drawAvatar(cx, cy, r, img, label, color) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    if (img && img.width) {
+      ctx.clip();
+      var s = Math.max((r * 2) / img.width, (r * 2) / img.height);
+      var w = img.width * s, h = img.height * s;
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    } else {
+      ctx.fillStyle = color;
+      ctx.fill();
+      var ch = (label || "?").charAt(0);
+      ctx.font = f(r * 0.92, 500);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(ch, cx, cy + r * 0.34);
+    }
+    ctx.restore();
+  }
+
+  /* ---------------- 状态栏 / 导航栏 ---------------- */
+  function drawStatusBar() {
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, 44);
+    text(state.time, 18, 30, { size: 15, weight: 600 });
+    drawSignal(303, 33); drawWifi(325, 33); drawBattery(344, 33);
+  }
+
+  function drawSignal(x, baseY) {
+    for (var i = 0; i < 4; i++) {
+      var h = 3 + i * 2.4;
+      fillRR(x + i * 4.6, baseY - h, 3.2, h, 1, C.ink);
+    }
+  }
+
+  function drawWifi(x, baseY) {
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+    for (var i = 0; i < 2; i++) {
+      ctx.beginPath();
+      ctx.arc(x + 6, baseY - 1, 4 + i * 3.6, Math.PI * 1.22, Math.PI * 1.78);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(x + 6, baseY - 1, 1.1, 0, Math.PI * 2);
+    ctx.fillStyle = C.ink; ctx.fill();
+  }
+
+  function drawBattery(x, baseY) {
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.1;
+    rr(x, baseY - 9, 20, 10, 3); ctx.stroke();
+    fillRR(x + 2, baseY - 7, 13, 6, 1.6, C.ink);
+    fillRR(x + 21, baseY - 6, 2, 4, 1, "#8a8a8a");
+  }
+
+  function drawNavBar(title) {
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 44, W, 44);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.9;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(26, 58); ctx.lineTo(19, 66); ctx.lineTo(26, 74);
+    ctx.stroke();
+    text(title, W / 2, 72, { size: 17, weight: 500, align: "center" });
+    for (var i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(W - 30 + i * 5.4, 66, 1.7, 0, Math.PI * 2);
+      ctx.fillStyle = C.ink; ctx.fill();
+    }
+    hline(88, 0, W);
+  }
+
+  /* ---------------- 气泡 / 转账卡片 ---------------- */
+  function bubbleHeight(textStr) {
+    var lines = wrap(textStr, 196, 15);
+    return Math.max(40, lines.length * 21 + 14);
+  }
+
+  function drawBubble(textStr, side, top) {
+    var lines = wrap(textStr, 196, 15);
+    var padX = 12, lh = 21;
+    var bw = 0;
+    ctx.font = f(15, 400);
+    for (var i = 0; i < lines.length; i++) bw = Math.max(bw, ctx.measureText(lines[i]).width);
+    bw += padX * 2;
+    var bh = Math.max(40, lines.length * lh + 14);
+    var avR = 20, avY = top + avR;
+
+    if (side === "left") {
+      drawAvatar(16 + avR, avY, avR, state.peer.img, state.peer.name, C.blue);
+      fillRR(16 + avR * 2 + 8, top, bw, bh, 6, C.white);
+      ctx.font = f(15, 400); ctx.fillStyle = C.ink;
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      for (var j = 0; j < lines.length; j++) {
+        ctx.fillText(lines[j], 16 + avR * 2 + 8 + padX, top + 9 + 15 + j * lh - 4);
+      }
+    } else {
+      var avX = W - 16 - avR;
+      drawAvatar(avX, avY, avR, state.me.img, state.me.name, C.green);
+      var bx = avX - avR - 8 - bw;
+      fillRR(bx, top, bw, bh, 6, C.bubbleSelf);
+      ctx.font = f(15, 400); ctx.fillStyle = C.ink;
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      for (var k = 0; k < lines.length; k++) {
+        ctx.fillText(lines[k], bx + padX, top + 9 + 15 + k * lh - 4);
+      }
+    }
+    return bh;
+  }
+
+  function drawTransferCard(amount, note, st, side, top) {
+    var w = 208, h = 88, avR = 20;
+    var accent = accentOf(st);
+    var avX = side === "right" ? W - 16 - avR : 16 + avR;
+    drawAvatar(avX, top + avR, avR,
+      side === "right" ? state.me.img : state.peer.img,
+      side === "right" ? state.me.name : state.peer.name,
+      side === "right" ? C.green : C.blue);
+    var x = side === "right" ? avX - avR - 8 - w : avX + avR + 8;
+
+    fillRR(x, top, w, h, 6, accent);
+
+    var icx = x + 26, icy = top + 30;
+    ctx.beginPath();
+    ctx.arc(icx, icy, 12, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,.92)";
+    ctx.lineWidth = 1.6; ctx.stroke();
+    text("¥", icx, icy + 5.5, { size: 14, weight: 600, color: "rgba(255,255,255,.95)", align: "center" });
+
+    text("¥" + amount, x + 48, top + 34, { size: 17, weight: 600, color: "#ffffff" });
+    text("转账 · " + statusLabel(st), x + 48, top + 53, { size: 11.5, color: "rgba(255,255,255,.85)" });
+
+    ctx.strokeStyle = "rgba(255,255,255,.28)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 12, top + h - 24.5);
+    ctx.lineTo(x + w - 12, top + h - 24.5);
+    ctx.stroke();
+
+    text("微信转账", x + 12, top + h - 8, { size: 11, color: "rgba(255,255,255,.82)" });
+    return h;
+  }
+
+  function drawInputBar() {
+    var y = H - 50;
+    ctx.fillStyle = "#F7F7F7";
+    ctx.fillRect(0, y, W, 50);
+    hline(y, 0, W);
+    ctx.strokeStyle = "#7A7A7A"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(26, y + 25, 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(22, y + 25); ctx.lineTo(30, y + 25); ctx.stroke();
+    fillRR(46, y + 11, W - 46 - 92, 28, 5, "#FFFFFF");
+    ctx.beginPath(); ctx.arc(W - 74, y + 25, 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#7A7A7A";
+    ctx.beginPath(); ctx.arc(W - 76.5, y + 22.5, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W - 71.5, y + 22.5, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W - 30, y + 25, 11, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(W - 30, y + 18); ctx.lineTo(W - 30, y + 32);
+    ctx.moveTo(W - 37, y + 25); ctx.lineTo(W - 23, y + 25);
+    ctx.stroke();
+  }
+
+  /* ---------------- 视图高度 ---------------- */
+  function measureChat() {
+    var y = 140;
+    for (var i = 0; i < state.lines.length; i++) {
+      var m = state.lines[i];
+      if (m.type === "transfer") y += 88 + 18;
+      else y += bubbleHeight(m.text) + 18;
+    }
+    return Math.max(812, y + 96);
+  }
+
+  function measureRecords() {
+    return Math.max(812, 88 + 96 + state.records.length * 76 + 70);
+  }
+
+  function currentHeight() {
+    if (state.view === "chat") return measureChat();
+    if (state.view === "records") return measureRecords();
+    return 812;
+  }
+
+  /* ---------------- 聊天 ---------------- */
+  function drawChat() {
+    drawStatusBar();
+    drawNavBar(state.peer.name);
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 88, W, H - 88 - 50);
+    text(state.divider, W / 2, 122, { size: 11.5, color: C.faint, align: "center" });
+
+    var y = 140;
+    for (var i = 0; i < state.lines.length; i++) {
+      var m = state.lines[i];
+      if (m.type === "transfer") y += drawTransferCard(m.amount, m.note, m.status, m.side, y) + 18;
+      else y += drawBubble(m.text, m.side, y) + 18;
+    }
+    drawInputBar();
+  }
+
+  /* ---------------- 转账详情 ---------------- */
+  function drawDetail() {
+    drawStatusBar();
+    drawNavBar("微信转账");
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 88, W, H - 88);
+    fillRR(0, 88, W, 382, 0, C.white);
+
+    drawAvatar(W / 2, 142, 26, state.peer.img, state.peer.name, C.blue);
+    text(state.peer.name, W / 2, 190, { size: 15.5, weight: 500, align: "center" });
+
+    var amountColor = statusLabel(state.status) === "待收款" ? C.orange : C.ink;
+    text("¥" + state.amount, W / 2, 244, { size: 34, weight: 600, align: "center", color: amountColor });
+
+    var stColor = accentOf(state.status);
+    text(statusLabel(state.status), W / 2, 272, { size: 13.5, align: "center", color: stColor });
+
+    hline(300, 16, W - 16);
+    text("转账说明", 18, 330, { size: 13.5, color: C.sub });
+    text(state.note, W - 18, 330, { size: 13.5, align: "right" });
+
+    hline(356, 16, W - 16);
+    text("转账时间", 18, 386, { size: 13.5, color: C.sub });
+    text(state.time, W - 18, 386, { size: 13.5, align: "right" });
+
+    hline(412, 16, W - 16);
+    text("支付方式", 18, 442, { size: 13.5, color: C.sub });
+    text("零钱", W - 18, 442, { size: 13.5, align: "right" });
+
+    text("微信支付", W / 2, H - 40, { size: 11.5, color: C.faint, align: "center" });
+  }
+
+  /* ---------------- 付款页（扫码后 / 向对方转账） ---------------- */
+  function drawPay() {
+    drawStatusBar();
+    drawNavBar("微信支付");
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 88, W, H - 88);
+    fillRR(0, 88, W, 512, 0, C.white);
+
+    drawAvatar(W / 2, 160, 30, state.peer.img, state.peer.name, C.blue);
+    text(state.peer.name, W / 2, 214, { size: 16, weight: 500, align: "center" });
+    text(state.scan.ok ? "收款方 · 已识别收款码" : "收款方", W / 2, 238, { size: 11.5, color: C.faint, align: "center" });
+
+    text("¥" + state.amount, W / 2, 300, { size: 36, weight: 600, align: "center" });
+
+    hline(336, 16, W - 16);
+    text("转账说明", 18, 370, { size: 13.5, color: C.sub });
+    text(state.note, W - 18, 370, { size: 13.5, align: "right" });
+
+    hline(396, 16, W - 16);
+    text("付款方式", 18, 430, { size: 13.5, color: C.sub });
+    text("零钱", W - 18, 430, { size: 13.5, align: "right" });
+
+    hline(456, 16, W - 16);
+    text("收款码", 18, 490, { size: 13.5, color: C.sub });
+    text(state.scan.ok ? "已识别" : "未扫描", W - 18, 490, { size: 13.5, align: "right", color: state.scan.ok ? C.green : C.faint });
+
+    fillRR(16, H - 108, W - 32, 48, 8, C.green);
+    text("转账 ¥" + state.amount, W / 2, H - 77, { size: 16, weight: 600, color: "#ffffff", align: "center" });
+    text("微信支付", W / 2, H - 26, { size: 11.5, color: C.faint, align: "center" });
+  }
+
+  /* ---------------- 转账记录 ---------------- */
+  function drawRecords() {
+    drawStatusBar();
+    drawNavBar("转账记录");
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 88, W, H - 88);
+
+    fillRR(0, 88, W, 96, 0, C.white);
+    drawAvatar(16 + 26, 88 + 44, 26, state.peer.img, state.peer.name, C.blue);
+    text(state.peer.name, 16 + 52 + 12, 88 + 34, { size: 16, weight: 500 });
+
+    var outSum = 0, inSum = 0;
+    for (var i = 0; i < state.records.length; i++) {
+      var r = state.records[i];
+      var a = parseFloat(r.amount.replace(/[^\d.]/g, "")) || 0;
+      if (r.dir === "in") inSum += a; else outSum += a;
+    }
+    var sumTxt = "共 " + state.records.length + " 笔 · 支出 ¥" + outSum.toFixed(2) + " · 收入 ¥" + inSum.toFixed(2);
+    text(sumTxt, 16 + 52 + 12, 88 + 58, { size: 12, color: C.sub });
+    hline(88 + 96, 0, W);
+
+    var top = 88 + 96;
+    for (var j = 0; j < state.records.length; j++) {
+      var rec = state.records[j];
+      var y = top + j * 76;
+      var isIn = rec.dir === "in";
+      ctx.fillStyle = C.white;
+      ctx.fillRect(0, y, W, 76);
+      drawAvatar(16 + 20, y + 26, 20, isIn ? state.me.img : state.peer.img,
+        isIn ? state.me.name : state.peer.name, isIn ? C.green : C.blue);
+
+      text((isIn ? "收到转账" : "转账给") + rec.name, 64, y + 30, { size: 14.5, weight: 500 });
+      text(rec.note || "转账", 64, y + 52, { size: 11.5, color: C.faint });
+
+      var amt = (isIn ? "+¥" : "-¥") + rec.amount;
+      text(amt, W - 16, y + 30, { size: 15, weight: 600, align: "right", color: isIn ? C.green : C.ink });
+      text(rec.status + " · " + rec.time, W - 16, y + 52, { size: 11, color: C.faint, align: "right" });
+
+      if (j < state.records.length - 1) hline(y + 76, 64, W - 16);
+    }
+
+    text("微信支付", W / 2, H - 26, { size: 11.5, color: C.faint, align: "center" });
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function render() {
+    H = currentHeight();
+    if (cv.height !== H * SCALE) cv.height = H * SCALE;
+    if (cv.width !== W * SCALE) cv.width = W * SCALE;
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, H);
+    if (state.view === "detail") drawDetail();
+    else if (state.view === "pay") drawPay();
+    else if (state.view === "records") drawRecords();
+    else drawChat();
+  }
+
+  /* ---------------- 导出 ---------------- */
+  function stamp() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return "wxtransfer_" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
+      "_" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + ".png";
+  }
+
+  function toast(msg) {
+    var el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("on");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { el.classList.remove("on"); }, 1900);
+  }
+
+  function savePng() {
+    var dataUrl = cv.toDataURL("image/png");
+    var name = stamp();
+    if (window.Android && typeof window.Android.saveImage === "function") {
+      try { window.Android.saveImage(dataUrl.split(",")[1], name); return; } catch (e) {}
+    }
+    var a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast("已下载 " + name);
+  }
+
+  function copyPng() {
+    var dataUrl = cv.toDataURL("image/png");
+    if (!navigator.clipboard || !window.ClipboardItem) { toast("该环境不支持剪贴板，用保存"); return; }
+    fetch(dataUrl).then(function (r) { return r.blob(); }).then(function (blob) {
+      return navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    }).then(function () { toast("已复制到剪贴板"); })
+      .catch(function () { toast("复制失败，用保存"); });
+  }
+
+  /* ---------------- 绑定 ---------------- */
+  function setSeg(v) {
+    document.querySelectorAll(".seg button").forEach(function (b) {
+      b.classList.toggle("on", b.getAttribute("data-view") === v);
+    });
+  }
+
+  ["meName", "peerName", "amount", "note", "time", "divider"].forEach(function (id) {
+    var el = document.getElementById(id);
+    el.addEventListener("input", function () {
+      if (id === "meName") state.me.name = el.value || "我";
+      else if (id === "peerName") state.peer.name = el.value || "对方";
+      else if (id === "amount") state.amount = el.value;
+      else if (id === "note") state.note = el.value;
+      else if (id === "time") state.time = el.value;
+      else state.divider = el.value;
+      render();
+    });
+  });
+
+  document.getElementById("amount").addEventListener("blur", function () {
+    var v = parseFloat(this.value.replace(/[^\d.]/g, ""));
+    if (!isNaN(v)) { this.value = v.toFixed(2); state.amount = this.value; render(); }
+  });
+
+  document.getElementById("status").addEventListener("change", function () {
+    state.status = this.value;
+    render();
+  });
+
+  document.querySelectorAll(".seg button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      state.view = btn.getAttribute("data-view");
+      setSeg(state.view);
+      render();
+    });
+  });
+
+  function parseLines(raw) {
+    var rows = raw.split("\n");
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var line = rows[i].replace(/\s+$/, "");
+      if (!line.trim()) continue;
+      var mt = /^\[(转账|收款)\]\s*([^:：]*)[:：]?\s*([^:：]*)[:：]?\s*(.*)$/.exec(line);
+      if (mt) {
+        var side = mt[1] === "转账" ? "right" : "left";
+        var st = (mt[4] || "待收款").trim();
+        out.push({ type: "transfer", side: side, amount: (mt[2] || "0.00").trim(), note: (mt[3] || "转账").trim(), status: st });
+        continue;
+      }
+      var mine = /^(我|自己)\s*[:：]\s*/.exec(line);
+      if (mine) { out.push({ type: "text", side: "right", text: line.slice(mine[0].length) }); continue; }
+      var other = /^(对方|他|她)\s*[:：]\s*/.exec(line);
+      if (other) { out.push({ type: "text", side: "left", text: line.slice(other[0].length) }); continue; }
+      out.push({ type: "text", side: "left", text: line });
+    }
+    return out;
+  }
+
+  document.getElementById("lines").addEventListener("input", function () {
+    state.lines = parseLines(this.value);
+    render();
+  });
+
+  /* 转账记录编辑器 */
+  var recList = document.getElementById("recList");
+
+  function recRow(rec, idx) {
+    var row = document.createElement("div");
+    row.className = "recRow";
+    row.innerHTML =
+      '<select class="rDir"><option value="out">支出</option><option value="in">收入</option></select>' +
+      '<input class="rAmount" placeholder="金额" inputmode="decimal">' +
+      '<input class="rTime" placeholder="时间">' +
+      '<button class="del" title="删除">×</button>' +
+      '<input class="rName" placeholder="昵称">' +
+      '<input class="rNote" placeholder="说明">' +
+      '<select class="rStatus"><option>已收款</option><option>待收款</option><option>已退还</option></select>' +
+      '<span></span>';
+    row.querySelector(".rDir").value = rec.dir;
+    row.querySelector(".rAmount").value = rec.amount;
+    row.querySelector(".rTime").value = rec.time;
+    row.querySelector(".rName").value = rec.name;
+    row.querySelector(".rNote").value = rec.note;
+    row.querySelector(".rStatus").value = rec.status;
+
+    function sync() {
+      var r = state.records[idx];
+      if (!r) return;
+      r.dir = row.querySelector(".rDir").value;
+      r.amount = row.querySelector(".rAmount").value;
+      r.time = row.querySelector(".rTime").value;
+      r.name = row.querySelector(".rName").value;
+      r.note = row.querySelector(".rNote").value;
+      r.status = row.querySelector(".rStatus").value;
+      render();
+    }
+    row.querySelectorAll("input,select").forEach(function (el) { el.addEventListener("input", sync); el.addEventListener("change", sync); });
+    row.querySelector(".del").addEventListener("click", function () {
+      state.records.splice(idx, 1);
+      buildRecList();
+      render();
+    });
+    return row;
+  }
+
+  function buildRecList() {
+    recList.innerHTML = "";
+    state.records.forEach(function (r, i) { recList.appendChild(recRow(r, i)); });
+  }
+
+  document.getElementById("addRec").addEventListener("click", function () {
+    state.records.push({ dir: "out", amount: "100.00", name: state.peer.name, note: "转账", time: "今天 " + state.time, status: "已收款" });
+    buildRecList();
+    render();
+  });
+
+  /* 选图：默认缩到 720 出 JPEG（省内存/存档），扫码时用 1400 出 PNG（保真） */
+  function pickImage(cb, maxSide, lossless) {
+    maxSide = maxSide || 720;
+    var inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.onchange = function () {
+      var file = inp.files && inp.files[0];
+      if (!file) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var s = Math.min(1, maxSide / Math.max(img.width, img.height));
+          var c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * s));
+          c.height = Math.max(1, Math.round(img.height * s));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          var dataUrl = lossless ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.9);
+          var out = new Image();
+          out.onload = function () { cb(out, dataUrl); };
+          out.src = dataUrl;
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    };
+    inp.click();
+  }
+
+  document.getElementById("btnMe").addEventListener("click", function () {
+    pickImage(function (img, dataUrl) {
+      state.me.img = img; state.me.data = dataUrl; render(); toast("我的头像已更新");
+    });
+  });
+  document.getElementById("btnPeer").addEventListener("click", function () {
+    pickImage(function (img, dataUrl) {
+      state.peer.img = img; state.peer.data = dataUrl; render(); toast("对方头像已更新");
+    });
+  });
+  document.getElementById("clrMe").addEventListener("click", function () { state.me.img = null; state.me.data = ""; render(); });
+  document.getElementById("clrPeer").addEventListener("click", function () { state.peer.img = null; state.peer.data = ""; render(); });
+
+  /* ---------------- 收款人档案（localStorage） ---------------- */
+  var PAYEES_KEY = "wx_payees_v1";
+
+  function loadPayees() {
+    try { return JSON.parse(localStorage.getItem(PAYEES_KEY) || "[]"); } catch (e) { return []; }
+  }
+
+  function savePayees(list) {
+    try { localStorage.setItem(PAYEES_KEY, JSON.stringify(list)); return true; }
+    catch (e) { toast("存储空间不足，档案没存上"); return false; }
+  }
+
+  function codeKey(code) {
+    var h = 2166136261;
+    for (var i = 0; i < code.length; i++) {
+      h ^= code.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  function findPayee(key) {
+    var list = loadPayees();
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
+    return null;
+  }
+
+  function applyProfile(prof) {
+    if (!prof) return false;
+    if (prof.name) {
+      state.peer.name = prof.name;
+      document.getElementById("peerName").value = prof.name;
+    }
+    if (prof.avatar) {
+      var img = new Image();
+      img.onload = function () { state.peer.img = img; state.peer.data = prof.avatar; render(); };
+      img.src = prof.avatar;
+    } else {
+      state.peer.img = null; state.peer.data = "";
+    }
+    render();
+    return true;
+  }
+
+  var payeeListEl = document.getElementById("payeeList");
+
+  function buildPayeeList() {
+    var list = loadPayees();
+    payeeListEl.innerHTML = "";
+    if (!list.length) {
+      var e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "还没有档案。扫一次码、填好昵称头像，点「存当前」。";
+      payeeListEl.appendChild(e);
+      return;
+    }
+    list.forEach(function (p, i) {
+      var row = document.createElement("div");
+      row.className = "payeeRow";
+      row.innerHTML = '<img alt=""><span class="pn"></span>' +
+        '<button class="use">使用</button><button class="danger del">删</button>';
+      var im = row.querySelector("img");
+      if (p.avatar) im.src = p.avatar;
+      row.querySelector(".pn").textContent = p.name || "未命名";
+      row.querySelector(".use").addEventListener("click", function () {
+        applyProfile(p);
+        toast("已套用：" + (p.name || "未命名"));
+      });
+      row.querySelector(".del").addEventListener("click", function () {
+        var arr = loadPayees();
+        arr.splice(i, 1);
+        savePayees(arr);
+        buildPayeeList();
+        toast("已删除");
+      });
+      payeeListEl.appendChild(row);
+    });
+  }
+
+  document.getElementById("savePayee").addEventListener("click", function () {
+    if (!state.scan.ok || !state.scan.code) {
+      toast("先扫一张收款码，再存档案");
+      return;
+    }
+    var key = codeKey(state.scan.code);
+    var list = loadPayees();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) idx = i;
+    var prof = {
+      key: key,
+      code: state.scan.code.slice(0, 60),
+      name: state.peer.name,
+      avatar: state.peer.data || "",
+      at: Date.now()
+    };
+    if (idx >= 0) list[idx] = prof; else list.unshift(prof);
+    while (list.length > 20) list.pop();
+    if (savePayees(list)) {
+      buildPayeeList();
+      toast("已存档案：" + prof.name);
+    }
+  });
+
+  /* ---------------- 扫码结果处理 ---------------- */
+  function handleQrResult(text, infoEl) {
+    if (!text) {
+      state.scan = { code: "", ok: false };
+      infoEl.textContent = "没识别到二维码，换一张清晰完整、不带裁切的收款码截图。";
+      toast("识别失败");
+      render();
+      return;
+    }
+    state.scan = { code: text, ok: true };
+    var isWx = /^wxp:/i.test(text) || /^https?:\/\//i.test(text);
+    infoEl.textContent = (isWx ? "已识别：" : "二维码内容：") + text.slice(0, 90);
+
+    var prof = findPayee(codeKey(text));
+    if (prof) {
+      applyProfile(prof);
+      toast("档案匹配：" + (prof.name || "未命名"));
+    } else if (isWx) {
+      toast("已识别微信收款码");
+    } else {
+      toast("识别到二维码");
+    }
+    if (isWx) {
+      state.view = "pay";
+      setSeg("pay");
+    }
+    render();
+  }
+
+  function decodeImage(img, infoEl) {
+    if (!window.Android || typeof window.Android.decodeQr !== "function") {
+      infoEl.textContent = "网页版不支持解码，装 APK 后再扫。";
+      toast("需要安卓端解码");
+      return;
+    }
+    var c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    c.getContext("2d").drawImage(img, 0, 0);
+    var dataUrl = c.toDataURL("image/png");
+    var res = "";
+    try { res = window.Android.decodeQr(dataUrl.split(",")[1]) || ""; } catch (e) { res = ""; }
+    handleQrResult(res, infoEl);
+  }
+
+  document.getElementById("btnQr").addEventListener("click", function () {
+    pickImage(function (img) {
+      decodeImage(img, document.getElementById("scanInfo"));
+    }, 1400, true);
+  });
+
+  /* ---------------- 相机扫码 ---------------- */
+  var camStream = null, camTimer = null;
+  var camBox = document.getElementById("camBox");
+  var camVideo = document.getElementById("camVideo");
+
+  function stopCam() {
+    if (camTimer) { clearTimeout(camTimer); camTimer = null; }
+    if (camStream) {
+      camStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+      camStream = null;
+    }
+    try { camVideo.srcObject = null; } catch (e) {}
+    camBox.classList.remove("on");
+  }
+
+  function camTick() {
+    if (!camStream) return;
+    if (!camVideo.videoWidth) { camTimer = setTimeout(camTick, 300); return; }
+    try {
+      var w = 460;
+      var h = Math.max(1, Math.round(camVideo.videoHeight * w / camVideo.videoWidth));
+      var c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(camVideo, 0, 0, w, h);
+      var b64 = c.toDataURL("image/jpeg", 0.72).split(",")[1];
+      var res = "";
+      if (window.Android && typeof window.Android.decodeQr === "function") {
+        res = window.Android.decodeQr(b64) || "";
+      }
+      if (res) {
+        stopCam();
+        handleQrResult(res, document.getElementById("scanInfo"));
+        return;
+      }
+    } catch (e) {}
+    camTimer = setTimeout(camTick, 350);
+  }
+
+  document.getElementById("btnCam").addEventListener("click", function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast("这个环境不支持相机，用相册选码");
+      return;
+    }
+    camBox.classList.add("on");
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    }).then(function (stream) {
+      camStream = stream;
+      camVideo.srcObject = stream;
+      var p = camVideo.play();
+      if (p && p.catch) p.catch(function () {});
+      camTimer = setTimeout(camTick, 700);
+      toast("把收款码对准取景框");
+    }).catch(function (err) {
+      camBox.classList.remove("on");
+      toast("相机打不开（" + ((err && err.name) || "unknown") + "），用相册选码");
+    });
+  });
+
+  document.getElementById("camClose").addEventListener("click", stopCam);
+
+  document.getElementById("save").addEventListener("click", savePng);
+  document.getElementById("copy").addEventListener("click", copyPng);
+  document.addEventListener("dblclick", function (e) { e.preventDefault(); }, { passive: false });
+
+  buildRecList();
+  buildPayeeList();
+  render();
+  window.__ready = true;
+})();
+</script>
+</body>
+</html>
