@@ -267,6 +267,7 @@
 </main>
 
 <footer>本页仅用于截图排版 / 界面演示。生成内容为本地渲染图片。</footer>
+<input type="file" id="filePicker" accept="image/*" style="display:none">
 <div id="viewer">
   <div class="vTop"><b>预览</b><span>双指缩放 · 双击放大</span><button id="vClose">关闭</button></div>
   <div class="vBody" id="vBody"><img id="vImg" alt="支付成功"></div>
@@ -868,24 +869,48 @@
     render();
   }
 
+  var pickCb = null;
+  var pickWatchdog = null;
+
   function pickImage(cb, maxSide) {
-    maxSide = maxSide || 1400;
-    var inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = "image/*";
-    inp.onchange = function () {
-      var file = inp.files && inp.files[0];
-      if (!file) return;
-      var fr = new FileReader();
-      fr.onload = function () {
-        var img = new Image();
-        img.onload = function () { cb(img); };
-        img.src = fr.result;
-      };
-      fr.readAsDataURL(file);
-    };
+    pickCb = cb;
+    var inp = document.getElementById("filePicker");
+    if (!inp) { engineStatus("浏览器不支持选图"); return; }
+    try { inp.value = ""; } catch (e) {}
     inp.click();
+    if (pickWatchdog) clearTimeout(pickWatchdog);
+    pickWatchdog = setTimeout(function () {
+      if (pickCb) {
+        engineStatus("没收到图片。如果是 iPhone 相册里的 HEIC 原图，先在「照片」里截图或用 JPG 再试");
+      }
+    }, 12000);
   }
+
+  document.getElementById("filePicker").addEventListener("change", function () {
+    var inp = this;
+    var cb = pickCb;
+    pickCb = null;
+    if (pickWatchdog) { clearTimeout(pickWatchdog); pickWatchdog = null; }
+    var file = inp.files && inp.files[0];
+    if (!file) { engineStatus("没有选中文件"); return; }
+    if (!cb) return;
+
+    engineStatus("已选择：" + file.name + "（" + (file.size / 1024 / 1024).toFixed(1) + " MB），读取中…");
+
+    var fr = new FileReader();
+    fr.onerror = function () { engineStatus("读取文件失败，换一张图试试"); };
+    fr.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        try { cb(img); } catch (e) { engineStatus("处理图片出错：" + (e && e.message ? e.message : e)); }
+      };
+      img.onerror = function () {
+        engineStatus("图片解码失败（常见于 iPhone 的 HEIC 原图）。请在相册里先「截图」或导出为 JPG 再选");
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
 
   document.getElementById("btnAvatar").addEventListener("click", function () {
     pickImage(function (img) {
