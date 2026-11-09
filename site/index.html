@@ -25,7 +25,10 @@
   .tplSwitch button.on{background:#fff;color:#111;font-weight:600}
   main{max-width:1080px;margin:0 auto;padding:16px 20px 48px;display:grid;grid-template-columns:minmax(320px,400px) 1fr;gap:22px;align-items:start}
   .stage{display:flex;flex-direction:column;gap:12px;min-width:0}
-  .phone{background:#fff;border-radius:26px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
+  .phone{position:relative;background:#fff;border-radius:26px;overflow:hidden;cursor:zoom-in;
+    box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
+  .phone .zoomHint{position:absolute;right:10px;bottom:10px;background:rgba(0,0,0,.5);color:#fff;
+    font-size:11px;padding:4px 9px;border-radius:9px;pointer-events:none;backdrop-filter:blur(4px)}
   .phone canvas{display:block;width:100%;height:auto;background:#fff}
   .actions{display:flex;gap:10px}
   .btn{flex:1;padding:13px 0;border-radius:12px;border:0;font-size:14.5px;font-weight:600;cursor:pointer;
@@ -135,7 +138,7 @@
 
 <main>
   <section class="stage">
-    <div class="phone"><canvas id="cv" width="750" height="1624"></canvas></div>
+    <div class="phone" id="phoneBox"><canvas id="cv" width="750" height="1624"></canvas><span class="zoomHint">点击放大 · 长按存图</span></div>
     <div class="actions">
       <button class="btn" id="btnSaveTop">保存 PNG</button>
       <button class="btn ghost" id="btnCopy">复制图片</button>
@@ -1453,7 +1456,9 @@
 
   function openViewer() {
     vImg.src = cv.toDataURL("image/png");
-    var w = Math.min(window.innerWidth * 0.92, 430);
+    var maxW = Math.min(window.innerWidth * 0.94, 460);
+    var maxH = Math.max(240, window.innerHeight - 210);
+    var w = Math.min(maxW, maxH * (cv.width / cv.height));
     vImg.style.width = Math.round(w) + "px";
     vScale = 1; vTx = 0; vTy = 0;
     applyViewer();
@@ -1561,6 +1566,8 @@
 
   document.getElementById("vSave").addEventListener("click", saveToAlbum);
   document.getElementById("vDownload").addEventListener("click", downloadPng);
+
+  document.getElementById("phoneBox").addEventListener("click", openViewer);
 
   document.getElementById("btnEngine").addEventListener("click", function () {
     if (paddleState === "ready") { engineStatus("识别引擎已就绪（PaddleOCR）"); toast("引擎已就绪"); return; }
