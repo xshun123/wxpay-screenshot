@@ -244,6 +244,32 @@
     </div>
 
     <div class="field">
+      <label>字号</label>
+      <div class="ctrl">
+        <input type="range" id="fdScale" min="0.75" max="1.35" step="0.01" value="1" style="flex:1">
+        <span id="fdScaleVal" style="font-size:12px;color:#9aa0a8;width:38px;text-align:right">100%</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>字重</label>
+      <div class="ctrl seg" id="segWeight">
+        <button data-w="400">常规</button>
+        <button data-w="500">中等</button>
+        <button data-w="600" class="on">半粗</button>
+        <button data-w="700">粗</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>识别条预览</label>
+      <div class="ctrl">
+        <input type="range" id="stripH" min="24" max="120" step="2" value="46" style="flex:1">
+        <span id="stripHVal" style="font-size:12px;color:#9aa0a8;width:38px;text-align:right">46px</span>
+      </div>
+    </div>
+
+    <div class="field">
       <label>导出尺寸</label>
       <div class="ctrl">
         <select id="selScale">
@@ -319,7 +345,10 @@
     showDone: true,
     avatarImg: null,
     autoTime: true,
-    autoBattery: true
+    autoBattery: true,
+    fdScale: 1,
+    fdWeight: 600,
+    stripH: 46
   };
 
   /* ---------------- 基础绘制 ---------------- */
@@ -344,7 +373,10 @@
 
   function text(str, x, y, o) {
     o = o || {};
-    ctx.font = f(o.size || 15, o.weight || 400);
+    var sz2 = (o.size || 15) * (state.fdScale || 1);
+    var wt2 = o.weight || 400;
+    if (wt2 >= 500) wt2 = state.fdWeight || 600;
+    ctx.font = f(sz2, wt2);
     ctx.fillStyle = o.color || C.ink;
     ctx.textAlign = o.align || "left";
     ctx.textBaseline = o.baseline || "alphabetic";
@@ -799,6 +831,55 @@
   bindSwitch("swRed", "showRed");
   bindSwitch("swAd", "showAd");
   bindSwitch("swCoupon", "showCoupon");
+
+  /* 字号 / 字重 / 识别条预览高度 · 自动记住 */
+  try {
+    var saved = JSON.parse(localStorage.getItem("wxStyle") || "null");
+    if (saved) {
+      if (saved.fdScale) state.fdScale = saved.fdScale;
+      if (saved.fdWeight) state.fdWeight = saved.fdWeight;
+      if (saved.stripH) state.stripH = saved.stripH;
+    }
+  } catch (e) {}
+
+  function saveStyle() {
+    try { localStorage.setItem("wxStyle", JSON.stringify({ fdScale: state.fdScale, fdWeight: state.fdWeight, stripH: state.stripH })); } catch (e) {}
+  }
+
+  function syncStyleUI() {
+    var sc = document.getElementById("fdScale");
+    var scv = document.getElementById("fdScaleVal");
+    if (sc) sc.value = state.fdScale;
+    if (scv) scv.textContent = Math.round(state.fdScale * 100) + "%";
+    var sh = document.getElementById("stripH");
+    var shv = document.getElementById("stripHVal");
+    if (sh) sh.value = state.stripH;
+    if (shv) shv.textContent = state.stripH + "px";
+    var img = document.getElementById("scanStripImg");
+    if (img) img.style.maxHeight = state.stripH + "px";
+    document.querySelectorAll("#segWeight button").forEach(function (b) {
+      b.classList.toggle("on", parseInt(b.getAttribute("data-w"), 10) === state.fdWeight);
+    });
+  }
+
+  document.getElementById("fdScale").addEventListener("input", function () {
+    state.fdScale = parseFloat(this.value) || 1;
+    saveStyle(); syncStyleUI(); render();
+  });
+
+  document.getElementById("stripH").addEventListener("input", function () {
+    state.stripH = parseInt(this.value, 10) || 46;
+    saveStyle(); syncStyleUI();
+  });
+
+  document.querySelectorAll("#segWeight button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      state.fdWeight = parseInt(b.getAttribute("data-w"), 10) || 600;
+      saveStyle(); syncStyleUI(); render();
+    });
+  });
+
+  syncStyleUI();
 
   /* 导出尺寸 */
   document.getElementById("selScale").addEventListener("change", function () {
@@ -1719,7 +1800,9 @@
         return;
       }
       document.getElementById("scanStrip").classList.add("on");
-      document.getElementById("scanStripImg").src = strip.toDataURL("image/png");
+      var stripImgEl = document.getElementById("scanStripImg");
+      stripImgEl.style.maxHeight = state.stripH + "px";
+      stripImgEl.src = strip.toDataURL("image/png");
 
       document.getElementById("scanText").textContent = "头像已抠出，正在识别名字…";
       toast("正在识别名字（首次需下载语言包，约 11MB）…", 4000);
