@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>辰风电竞 · 透明挂播</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:720px;height:720px;background:transparent;overflow:hidden}
+  body{font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif}
+  #root{position:relative;width:720px;height:720px;background:transparent;overflow:hidden}
+
+  .scene{position:absolute;left:0;top:0;width:720px;height:720px;
+         display:flex;align-items:center;justify-content:center;will-change:transform}
+
+  .hook{font-size:72px;font-weight:800;letter-spacing:-.02em;color:#fff;white-space:nowrap;
+    -webkit-text-stroke:4px rgba(9,13,26,.96);paint-order:stroke fill;
+    text-shadow:0 7px 0 rgba(9,13,26,.30)}
+  .hook em{font-style:normal;color:#a9c5ff}
+
+  .url{font-size:106px;font-weight:800;letter-spacing:-.015em;color:#fff;white-space:nowrap;
+    font-family:Consolas,"Microsoft YaHei UI",monospace;
+    -webkit-text-stroke:4px rgba(9,13,26,.96);paint-order:stroke fill;
+    text-shadow:0 7px 0 rgba(9,13,26,.30)}
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="scene" id="s1"><div class="hook" id="hook1">想和主播<em>平打吃豆</em>？</div></div>
+  <div class="scene" id="s2"><div class="url" id="url1">hysafe.top</div></div>
+</div>
+<script>
+  var clamp01=function(x){return x<0?0:x>1?1:x};
+  var easeInOut=function(x){return x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+  var easeOut=function(x){return 1-Math.pow(1-x,3)};
+  var seg=function(t,s,d){return clamp01((t-s)/d)};
+
+  var s1=document.getElementById('s1'), s2=document.getElementById('s2');
+  var H=720, TOTAL=4200;
+
+  window.renderAt=function(t){
+    // 第一句：0-1200 停在中间 / 1200-1560 上移出场 / 3600-4000 从下入场 / 4000-4200 停
+    var y1;
+    if (t < 1200) y1 = 0;
+    else if (t < 1560) y1 = -H * easeInOut(seg(t,1200,360));
+    else if (t < 3600) y1 = -H;
+    else y1 = H * (1 - easeOut(seg(t,3600,400)));
+
+    // 第二句：1560-1960 从下入场 / 1960-3100 停 / 3100-3460 上移出场
+    var y2;
+    if (t < 1560) y2 = H;
+    else if (t < 1960) y2 = H * (1 - easeOut(seg(t,1560,400)));
+    else if (t < 3100) y2 = 0;
+    else if (t < 3460) y2 = -H * easeInOut(seg(t,3100,360));
+    else y2 = -H;
+
+    s1.style.transform = 'translateY(' + y1.toFixed(1) + 'px)';
+    s2.style.transform = 'translateY(' + y2.toFixed(1) + 'px)';
+  };
+  window.renderAt(0);
+</script>
+</body>
+</html>

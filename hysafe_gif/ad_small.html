@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>辰风电竞 · 小尺寸挂播</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:720px;height:720px;overflow:hidden;background:#05070f}
+  body{font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;color:#fff}
+  #root{position:relative;width:720px;height:720px;overflow:hidden}
+
+  .bg{position:absolute;inset:0;background:
+      radial-gradient(560px 430px at 50% 16%, #1a2752 0%, #0b1124 52%, #05070f 100%)}
+  .glow{position:absolute;left:50%;top:53%;width:880px;height:880px;margin:-440px 0 0 -440px;
+    background:radial-gradient(circle, rgba(79,109,245,.30) 0%, rgba(139,108,246,.14) 40%, rgba(0,0,0,0) 66%)}
+
+  .stack{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px}
+
+  h1{font-size:84px;line-height:1.08;font-weight:800;letter-spacing:-.02em;white-space:nowrap;text-align:center;
+     background:linear-gradient(180deg,#ffffff 30%,#bccfff 100%);
+     -webkit-background-clip:text;background-clip:text;color:transparent}
+  h1 em{font-style:normal;background:linear-gradient(180deg,#a3c1ff 0%,#5b7cfa 62%,#8b6cf6 100%);
+        -webkit-background-clip:text;background-clip:text;color:transparent}
+
+  .rule{height:3px;border-radius:2px;
+    background:linear-gradient(90deg,rgba(91,124,250,0),#8b6cf6 50%,rgba(91,124,250,0))}
+
+  .url{font-size:112px;line-height:1.05;font-weight:800;letter-spacing:-.015em;white-space:nowrap;
+    font-family:Consolas,"Microsoft YaHei UI",monospace;
+    background-image:linear-gradient(100deg,#ffffff 0%,#ffffff 34%,#9fc0ff 44%,#ffffff 54%,#ffffff 100%);
+    background-size:260% 100%;background-position:0% 0;
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 12px 38px rgba(79,109,245,.55))}
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="bg"></div>
+  <div class="glow"></div>
+  <div class="stack">
+    <h1 id="hook">想和主播<em>单挑</em>？</h1>
+    <div class="rule" id="rule"></div>
+    <div class="url" id="url">hysafe.top</div>
+  </div>
+</div>
+<script>
+  var hook = document.getElementById('hook');
+  var rule = document.getElementById('rule');
+  var url  = document.getElementById('url');
+  var TOTAL = 4000;
+  var TWO_PI = Math.PI * 2;
+
+  // 全帧可见 + 周期函数 = 首尾完全一致，循环没有跳帧
+  window.renderAt = function(t){
+    var w = TWO_PI * t / TOTAL;
+
+    hook.style.opacity = (0.955 + 0.045 * Math.sin(w + 0.6)).toFixed(3);
+    hook.style.transform = 'translateY(' + (3 * Math.sin(w + 0.6)).toFixed(2) + 'px)';
+
+    rule.style.width = Math.round(300 + 46 * Math.sin(w + 1.9)) + 'px';
+    rule.style.opacity = (0.55 + 0.45 * (0.5 + 0.5 * Math.sin(w + 1.9))).toFixed(3);
+
+    url.style.transform = 'scale(' + (1 + 0.014 * Math.sin(w)).toFixed(4) + ')';
+    // 高光扫过文字（每 4 秒一次，首尾同相位）
+    var sweep = (t / TOTAL);
+    url.style.backgroundPosition = (sweep * 260).toFixed(2) + '% 0';
+  };
+  window.renderAt(0);
+</script>
+</body>
+</html>

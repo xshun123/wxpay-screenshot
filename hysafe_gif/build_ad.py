@@ -1,7 +1,7 @@
 import json, os, sys
 from PIL import Image
 
-frames_dir = 'frames_ad'
+frames_dir = os.environ.get('FRAMES_DIR', 'frames_ad')
 meta = json.load(open(os.path.join(frames_dir, 'meta.json')))
 frames = meta['frames']
 out_path = sys.argv[1] if len(sys.argv) > 1 else 'ad.gif'
